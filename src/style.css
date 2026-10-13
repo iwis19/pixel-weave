@@ -102,8 +102,34 @@ input[type="color"] { border: 1px solid var(--border-hover); border-radius: 5px;
 input[type="checkbox"] { accent-color: var(--text); width: 16px; height: 16px; cursor: pointer; }
 .text-control { display: flex; flex-direction: column; font-size: 11px; gap: 9px; margin-top: 18px; }
 .characters-input { font-family: var(--mono); font-size: 15px; letter-spacing: 3px; color: var(--text); border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); width: 100%; padding: 10px; }
-.shape-chips { display: flex; gap: 5px; margin-top: 18px; }
-.shape-chips button { flex: 1; font-size: 18px; padding: 7px 0; }
+.shape-icon { width: 24px; height: 24px; flex: 0 0 auto; }
+.shape-picker-trigger { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; margin-top: 20px; padding: 12px 10px; text-align: left; }
+.shape-preview { display: flex; gap: 3px; }
+.shape-preview .shape-icon { width: 18px; height: 18px; }
+.shape-picker-trigger > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
+.picker-chevron { margin-left: auto; color: var(--muted); }
+.shape-picker { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--border-hover); border-radius: 12px; color: var(--text); background: var(--panel); box-shadow: 0 20px 80px #0009; overflow-y: auto; }
+.shape-picker::backdrop { background: #0009; backdrop-filter: blur(3px); }
+.picker-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.picker-header h2 { font-size: 16px; font-weight: 550; margin: 0; }
+.picker-close { font-size: 20px; padding: 2px 8px; background: transparent; border-color: transparent; color: var(--muted); }
+.picker-filters { display: flex; gap: 8px; }
+.picker-filters input { width: 0; min-width: 0; flex: 1; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; background: var(--control); }
+.picker-filters select { max-width: 130px; }
+.picker-selected { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; }
+.selected-shape { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 5px 7px; }
+.selected-shape .shape-icon { width: 16px; height: 16px; }
+.chip-remove { color: var(--muted); margin-left: 2px; }
+.picker-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+.picker-symbol { position: relative; display: flex; align-items: center; justify-content: center; height: 64px; padding: 10px; background: transparent; }
+.picker-symbol .shape-icon { width: 30px; height: 30px; }
+.symbol-check { position: absolute; top: 3px; right: 5px; font-size: 10px; opacity: 0; }
+.picker-symbol[aria-pressed="true"] .symbol-check { opacity: 1; }
+.picker-empty { color: var(--muted); text-align: center; padding: 28px 0; }
+.picker-footer { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; }
+.picker-count { flex: 1; color: var(--muted); font-size: 11px; }
+.picker-apply { background: var(--text); color: var(--canvas); border-color: var(--text); }
+.picker-apply:hover { background: #d6d6d6; }
 .selection-actions { display: flex; gap: 5px; margin-top: 16px; }
 .selection-actions button { padding: 8px; font-size: 11px; }
 .selection-actions button:first-child { flex: 1; }
@@ -141,7 +167,7 @@ input[type="checkbox"] { accent-color: var(--text); width: 16px; height: 16px; c
   .canvas-colors input { width: 24px; height: 22px; }
   .canvas-colors .reset-color { width: 22px; height: 22px; }
   .layers-section { flex: 1; min-width: 0; padding: 13px 14px; position: relative; }
-  .add-actions { position: absolute; right: 14px; top: 7px; margin: 0; display: flex; }
+  .add-actions { position: static; margin: 10px 0 0; display: flex; flex-wrap: wrap; }
   .add-actions button { padding: 5px 8px; }
   .layer-list { display: flex; gap: 7px; overflow-x: auto; margin-top: 15px; padding-bottom: 4px; scrollbar-width: thin; }
   .layer-row { flex: 0 0 190px; }

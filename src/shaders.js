@@ -92,7 +92,7 @@ uniform int uSymbolCount;
 uniform int uMapping;
 uniform int uInvert;
 uniform int uShapes;
-uniform int uShapeIds[6];
+uniform int uShapeIds[12];
 uniform float uStroke;
 uniform int uMaskScatter;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed * 19.19) * 43758.5453); }
@@ -107,6 +107,26 @@ float orderedThreshold(vec2 p) {
   return (float(values[tile.y * 4 + tile.x]) + 0.5) / 16.0;
 }
 float inside(float distance, float aa) { return 1.0 - smoothstep(-aa, aa, distance); }
+float polygonDistance(vec2 p, int vertices, bool star) {
+  float distanceSquared = 1.0;
+  bool contained = false;
+  vec2 previous = vec2(0.0, 0.48);
+  for (int i = 1; i <= 10; i++) {
+    if (i > vertices) break;
+    float angle = 1.570796327 + float(i) * 6.283185307 / float(vertices);
+    float radius = star && (i % 2 == 1) ? 0.21 : 0.48;
+    vec2 current = vec2(cos(angle), sin(angle)) * radius;
+    vec2 edge = current - previous;
+    vec2 nearest = p - previous - edge * clamp(dot(p - previous, edge) / dot(edge, edge), 0.0, 1.0);
+    distanceSquared = min(distanceSquared, dot(nearest, nearest));
+    if ((current.y > p.y) != (previous.y > p.y)) {
+      float crossing = (previous.x - current.x) * (p.y - current.y) / (previous.y - current.y) + current.x;
+      if (p.x < crossing) contained = !contained;
+    }
+    previous = current;
+  }
+  return sqrt(distanceSquared) * (contained ? -1.0 : 1.0);
+}
 float geometricMask(int shape, vec2 local, float aa) {
   vec2 q = abs(local - 0.5);
   float box = max(q.x, q.y);
@@ -115,8 +135,23 @@ float geometricMask(int shape, vec2 local, float aa) {
   if (shape == 2) return max(0.0, inside(box - 0.47, aa) - inside(box - (0.47 - uStroke), aa));
   if (shape == 3) return inside(min(q.x, q.y) - uStroke * 0.5, aa) * inside(box - 0.46, aa);
   if (shape == 4) return inside(pow(q.x / 0.48, 0.55) + pow(q.y / 0.48, 0.55) - 1.0, aa * 3.0);
-  float diamond = q.x + q.y;
-  return max(0.0, inside(diamond - 0.48, aa) - inside(diamond - (0.48 - uStroke), aa));
+  if (shape == 5) {
+    float diamond = q.x + q.y;
+    return max(0.0, inside(diamond - 0.48, aa) - inside(diamond - (0.48 - uStroke), aa));
+  }
+  vec2 p = local - 0.5;
+  if (shape == 6) return inside(abs(q.x - q.y) * 0.70710678 - uStroke * 0.5, aa) * inside(box - 0.43, aa);
+  if (shape == 7) {
+    float line = abs(p.x);
+    line = min(line, abs(dot(p, vec2(0.5, 0.8660254))));
+    line = min(line, abs(dot(p, vec2(0.5, -0.8660254))));
+    return inside(line - uStroke * 0.5, aa) * inside(length(p) - 0.46, aa);
+  }
+  if (shape == 8) return inside(polygonDistance(p, 10, true), aa);
+  if (shape == 10) return max(0.0, inside(length(p) - 0.45, aa) - inside(length(p) - (0.45 - uStroke), aa));
+  float triangle = polygonDistance(p, 3, false);
+  if (shape == 11) return max(0.0, inside(triangle, aa) - inside(triangle + uStroke, aa));
+  return inside(triangle, aa);
 }
 void main() {
   float cell = max(1.0, uCellSize * uReferenceScale);

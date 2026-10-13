@@ -335,21 +335,21 @@ export class Renderer {
       uMaskPosition: layer.maskPosition, uMaskFeather: layer.maskFeather, uMaskCenter: [layer.maskX, layer.maskY],
       uMaskRadius: layer.maskRadius, uMaskInvert: layer.maskInvert ? 1 : 0,
       uSelectionActive: layer.selectionActive ? 1 : 0,
-      uClumping: layer.type === 'pixel' ? layer.clumping : 0,
+      uClumping: ['pixel', 'squares'].includes(layer.type) ? layer.clumping : 0,
     };
   }
 
   drawLayer(layer) {
     if ((layer.type === 'pixel' && layer.pixelShape === 'dot') || (layer.type === 'ascii' && layer.symbolMode === 'points')) return this.drawPoints(layer);
     if (layer.type === 'ascii' && layer.symbolMode === 'dots') return this.drawDots(layer);
-    const shapes = layer.type === 'ascii' && layer.symbolMode === 'shapes';
+    const shapes = layer.type === 'shapes' || (layer.type === 'ascii' && layer.symbolMode === 'shapes');
     const symbols = shapes ? symbolsFor(layer) : [];
     const atlas = layer.type === 'ascii' && !shapes ? this.atlasFor(layer) : { texture: this.empty, count: symbols.length };
     this.pass('drawing', this.layerTarget, {
-      ...this.uniforms(layer), uType: layer.type === 'pixel' ? 1 : 0,
+      ...this.uniforms(layer), uType: ['pixel', 'squares'].includes(layer.type) ? 1 : 0,
       uPixelShape: ['square', 'dot', 'box'].indexOf(layer.pixelShape),
       uSymbolCount: atlas.count, uMapping: layer.mapping === 'random' ? 1 : 0, uInvert: layer.invert ? 1 : 0,
-      uShapes: shapes ? 1 : 0, 'uShapeIds[0]': Array.from({ length: 6 }, (_, index) => SHAPES.indexOf(symbols[index] || 'dot')),
+      uShapes: shapes ? 1 : 0, 'uShapeIds[0]': Array.from({ length: SHAPES.length }, (_, index) => SHAPES.indexOf(symbols[index] || 'dot')),
       uStroke: layer.stroke, uMaskScatter: layer.maskEdges === 'scatter' ? 1 : 0,
     }, { uSource: this.source, uAtlas: atlas.texture, uPaintMask: this.paintMaskFor(layer) });
     return this.layerTarget.texture;

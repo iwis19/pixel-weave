@@ -3,14 +3,14 @@ import { createLayer } from './model.js';
 // Every part of this look is regular, editable renderer state. No flower-specific shader.
 export function peonyProject(referenceWidth = 900) {
   const unit = referenceWidth / 900;
-  const red = createLayer('pixel', {
+  const red = createLayer('squares', {
     name: 'Red cells', id: 'peony-red', cellSize: 18 * unit, size: 1,
     colorMode: 'solid', color: '#ff0603', colorShading: 1, detail: 1,
     contrast: 1.3, opacity: 0.93, threshold: 0.16,
     density: 1, densityPattern: 'ordered', maskMode: 'linear', maskAngle: 55,
     maskPosition: 0.52, maskFeather: 0.64, maskEdges: 'fade',
   });
-  const pale = createLayer('pixel', {
+  const pale = createLayer('squares', {
     name: 'Lilac cells', id: 'peony-lilac', cellSize: 15 * unit, size: 0.96,
     colorMode: 'solid', color: '#af7aff', colorShading: 1, detail: 1,
     opacity: 0.42, threshold: 0.5, contrast: 1.2,

@@ -1,10 +1,11 @@
 import { Renderer } from './engine.js';
-import { createLayer, defaultProject, normalizeProject, MAX_LAYERS, SHAPES } from './model.js';
+import { createLayer, defaultProject, normalizeProject, MAX_LAYERS, LAYER_NAMES } from './model.js';
 import { makeSample } from './sample.js';
 import { peonyProject, dotsProject, loadPeonySource } from './presets.js';
 import { SelectionEditor } from './selection-editor.js';
 import { initPanelResize } from './panel-resize.js';
 import { uiIcon } from './ui-icons.js';
+import { openShapePicker, shapeIcon, shapeInfo } from './shape-picker.js';
 
 const $ = selector => document.querySelector(selector);
 const canvas = $('#preview');
@@ -88,7 +89,7 @@ function range(parent, key, label, min, max, step = 0.01, format = multiplier) {
   const input = controlElement('input', { type: 'range', min, max, step, value: layer[key], 'data-key': key, 'aria-label': label });
   input.addEventListener('input', () => {
     layer[key] = Number(input.value);
-    if (key === 'clumping' && layer.type === 'pixel') layer.densityPattern = 'random';
+    if (key === 'clumping') layer.densityPattern = 'random';
     if (key === 'threshold' && layer.ceiling < layer.threshold) {
       layer.ceiling = layer.threshold;
       const ceiling = inspector.querySelector('[data-key="ceiling"]');
@@ -182,10 +183,9 @@ function renderInspector() {
     inspector.append(controlElement('div', { class: 'empty-inspector' }, 'Select or add a layer'));
     return;
   }
-  if (layer.type !== 'pixel') selectionEditor.stop();
   const header = controlElement('div', { class: 'inspector-header' });
   const identity = controlElement('div', { class: 'inspector-identity' });
-  identity.append(controlElement('span', { class: 'section-label' }, layer.type === 'pixel' ? 'Pixel layer' : 'ASCII layer'));
+  identity.append(controlElement('span', { class: 'section-label' }, `${LAYER_NAMES[layer.type]} layer`));
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
   name.addEventListener('input', () => { layer.name = name.value; renderLayers(); });
   identity.append(name);
@@ -210,7 +210,7 @@ function renderInspector() {
   header.append(identity, duplicate, remove); inspector.append(header);
 
   const sections = [['shape', 'Shape'], ['color', 'Color'], ['distribution', 'Distribution'],
-    ...(layer.type === 'ascii' ? [['sampling', 'Sampling']] : []), ['glow', 'Glow'], ['transform', 'Transform']];
+    ...(layer.type !== 'pixel' ? [['sampling', 'Sampling']] : []), ['glow', 'Glow'], ['transform', 'Transform']];
   const navigation = controlElement('div', { class: 'inspector-tabs', role: 'tablist', 'aria-label': 'Layer settings' });
   const body = controlElement('div', { class: 'inspector-body' });
   const panels = new Map(), tabs = [];
@@ -243,35 +243,39 @@ function renderInspector() {
   inspector.append(navigation, body);
   const shape = panels.get('shape');
   if (layer.type === 'pixel') {
-    select(shape, 'pixelShape', 'Shape', [['dot', 'Dot'], ['square', 'Square'], ['box', 'Hollow square']], true);
-    range(shape, 'cellSize', 'Spacing', layer.pixelShape === 'dot' ? 6 : 2, 100, .01, px);
-    if (layer.pixelShape === 'dot') range(shape, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
-    else range(shape, 'size', 'Pixel size', .1, 1, .01, percent);
+    range(shape, 'cellSize', 'Spacing', 6, 100, .01, px);
+    range(shape, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
+  } else if (layer.type === 'squares') {
+    select(shape, 'pixelShape', 'Style', [['square', 'Filled'], ['box', 'Hollow']], true);
+    range(shape, 'cellSize', 'Spacing', 2, 100, .25, px);
+    range(shape, 'size', 'Square size', .1, 1, .01, percent);
     if (layer.pixelShape === 'box') range(shape, 'stroke', 'Stroke width', .02, .4, .01, percent);
+    range(shape, 'toneSize', 'Size by tone', 0, 1, .01, percent);
   } else {
-    select(shape, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes']], true);
-    if (layer.symbolMode === 'text') {
+    if (layer.type === 'ascii') {
       const label = controlElement('label', { class: 'text-control' }, 'Characters');
       const input = controlElement('input', { type: 'text', value: layer.characters, 'data-key': 'characters', 'aria-label': 'Characters', spellcheck: 'false', class: 'characters-input' });
       input.addEventListener('input', () => { layer.characters = Array.from(input.value).slice(0, 64).join(''); scheduleRender(); });
       label.append(input); shape.append(label);
     } else {
-      const chips = controlElement('div', { class: 'shape-chips', role: 'group', 'aria-label': 'Shapes' });
-      const names = { square: '■', box: '□', cross: '+', star: '✦', diamond: '◇' };
-      for (const symbol of SHAPES.filter(value => value !== 'dot')) {
-        const button = controlElement('button', { 'aria-label': symbol, title: symbol, 'aria-pressed': layer.shapes.includes(symbol) }, names[symbol]);
-        button.addEventListener('click', () => {
-          layer.shapes = layer.shapes.includes(symbol) ? layer.shapes.filter(value => value !== symbol) : [...layer.shapes, symbol];
-          renderInspector(); scheduleRender();
-        });
-        chips.append(button);
-      }
-      shape.append(chips);
+      const picker = controlElement('button', { class: 'shape-picker-trigger', type: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Choose shapes' });
+      const preview = controlElement('span', { class: 'shape-preview', 'aria-hidden': 'true' });
+      for (const id of layer.shapes.slice(0, 4)) preview.append(shapeIcon(id));
+      const label = layer.shapes.length === 1 ? shapeInfo(layer.shapes[0])?.name : layer.shapes.length ? `${layer.shapes.length} shapes` : 'Choose shapes';
+      picker.append(preview, controlElement('span', {}, label), controlElement('span', { class: 'picker-chevron', 'aria-hidden': 'true' }, '⌄'));
+      picker.addEventListener('click', () => openShapePicker({ selected: layer.shapes, trigger: picker, onApply: shapes => {
+        layer.shapes = shapes;
+        // Keep the trigger mounted so closing the modal restores keyboard focus.
+        preview.replaceChildren(...shapes.slice(0, 4).map(shapeIcon));
+        picker.children[1].textContent = shapes.length === 1 ? shapeInfo(shapes[0])?.name : `${shapes.length} shapes`;
+        scheduleRender();
+      } }));
+      shape.append(picker);
     }
     range(shape, 'cellSize', 'Spacing', 2, 100, .25, px);
     range(shape, 'size', 'Symbol size', .1, 1, .01, percent);
     range(shape, 'toneSize', 'Size by tone', 0, 1, .01, percent);
-    if (layer.symbolMode === 'shapes' && layer.shapes.some(value => ['box', 'cross', 'diamond'].includes(value))) range(shape, 'stroke', 'Stroke width', .02, .4, .01, percent);
+    if (layer.type === 'shapes') range(shape, 'stroke', 'Stroke width', .02, .4, .01, percent);
     toggle(shape, 'invert', 'Reverse symbol order');
   }
 
@@ -283,12 +287,9 @@ function renderInspector() {
 
   transformControls(panels.get('transform'));
   const distribution = panels.get('distribution');
-  if (layer.type === 'pixel') {
+  if (['pixel', 'squares'].includes(layer.type)) {
     range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
     range(distribution, 'clumping', 'Clumping', 0, 1, .01, percent);
-    const selection = group('Selection', distribution);
-    range(selection, 'brushSize', 'Brush size', 10, 500, 10, px);
-    selectionEditor.inspect(selection);
   } else {
     select(distribution, 'mapping', 'Symbol mapping', [['brightness', 'Brightness'], ['random', 'Random']], true);
     range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
@@ -296,6 +297,11 @@ function renderInspector() {
     range(distribution, 'densityShading', 'Density by tone', 0, 1, .01, percent);
     range(distribution, 'densityGamma', 'Tone curve', .2, 4);
     if (layer.densityPattern === 'random' || layer.mapping === 'random') range(distribution, 'seed', 'Seed', 0, 9999, 1, String);
+  }
+  const selection = group('Selection', distribution);
+  range(selection, 'brushSize', 'Brush size', 10, 500, 10, px);
+  selectionEditor.inspect(selection);
+  if (layer.type !== 'pixel') {
     const mask = group('', panels.get('transform')); mask.classList.add('transform-region');
     select(mask, 'maskMode', 'Region', [['none', 'All'], ['linear', 'Linear'], ['radial', 'Radial']], true);
     if (layer.maskMode !== 'none') {
@@ -347,7 +353,7 @@ function moveLayer(layer, direction) {
 
 function renderLayers() {
   const list = $('#layers'); list.replaceChildren();
-  const glyphs = { ascii: 'Aa', pixel: '▦' };
+  const glyphs = { ascii: 'Aa', pixel: '⠿', squares: '□', shapes: '✦' };
   for (const layer of [...project.layers].reverse()) {
     const row = controlElement('div', { class: `layer-row${layer.id === selectedId ? ' selected' : ''}` });
     const toggle = controlElement('button', { class: 'layer-toggle', 'aria-pressed': layer.enabled, 'aria-label': `Toggle ${layer.name}`, title: layer.enabled ? 'Hide layer' : 'Show layer' });

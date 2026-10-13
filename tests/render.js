@@ -1,5 +1,5 @@
 import { Renderer } from '../src/engine.js';
-import { createLayer } from '../src/model.js';
+import { createLayer, normalizeProject } from '../src/model.js';
 import { loadPeonySource } from '../src/presets.js';
 import { decodeSelection, encodeSelection, paintSelection } from '../src/selection.js';
 
@@ -25,8 +25,8 @@ const pixel = (pixels, x, y) => [...pixels.slice(((renderer.height - 1 - y) * re
 function fillWhite() { ctx.clearRect(0, 0, 128, 128); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 128, 128); renderer.setSource(source); }
 fillWhite();
 
-test('Pixel and ASCII layers both draw; an empty character set draws nothing', () => {
-  const p = createLayer('pixel', { cellSize: 8 });
+test('Squares and ASCII layers both draw; an empty character set draws nothing', () => {
+  const p = createLayer('squares', { cellSize: 8 });
   const a = createLayer('ascii', { characters: 'X', cellSize: 8 });
   assert(sum(snapshot([p])) > 0, 'Pixels missing'); assert(sum(snapshot([a])) > 0, 'ASCII missing');
   a.characters = ''; assert(sum(snapshot([a])) === 0, 'Empty set produced symbols');
@@ -40,7 +40,7 @@ test('Symbols are isolated between layers and selection modes', () => {
 });
 test('Positive offsets move the layer right and down; transparent margins remain empty', () => {
   ctx.clearRect(0, 0, 128, 128); ctx.fillStyle = '#ff0000'; ctx.fillRect(16, 16, 32, 32); renderer.setSource(source);
-  const p = createLayer('pixel', { cellSize: 8, size: 1, offsetX: 32, offsetY: 40 });
+  const p = createLayer('squares', { cellSize: 8, size: 1, offsetX: 32, offsetY: 40 });
   const image = snapshot([p]);
   assert(pixel(image, 28, 28)[0] === 0, 'Old position still visible');
   assert(pixel(image, 60, 68)[0] > 220, 'Incorrect transform or vertical orientation');
@@ -53,8 +53,8 @@ test('Opacity zero and hidden layers make no contribution', () => {
 });
 test('Layer order changes normal blending and preserves both layers with add', () => {
   fillWhite();
-  const red = createLayer('pixel', { size: 1, cellSize: 8, colorMode: 'tint', color: '#ff0000' });
-  const blue = createLayer('pixel', { size: 1, cellSize: 8, colorMode: 'tint', color: '#0000ff' });
+  const red = createLayer('squares', { size: 1, cellSize: 8, colorMode: 'tint', color: '#ff0000' });
+  const blue = createLayer('squares', { size: 1, cellSize: 8, colorMode: 'tint', color: '#0000ff' });
   let image = snapshot([red, blue]); assert(pixel(image, 28, 28)[2] > 200, 'Top blue layer missing');
   image = snapshot([blue, red]); assert(pixel(image, 28, 28)[0] > 200, 'Top red layer missing');
   blue.blend = 'add'; image = snapshot([red, blue]); const rgb = pixel(image, 28, 28);
@@ -77,7 +77,7 @@ test('Soft glow and box glow produce distinct halos', () => {
 });
 test('Glow strength zero leaves the composition untouched for every blend mode', () => {
   fillWhite();
-  const a = createLayer('pixel', { colorMode: 'tint', color: '#336699' });
+  const a = createLayer('squares', { colorMode: 'tint', color: '#336699' });
   const plain = snapshot([a]);
   for (const blend of ['normal', 'screen', 'add', 'multiply']) {
     const glow = createLayer('glow', { glowSource: a.id, strength: 0, blend });
@@ -92,18 +92,18 @@ test('Density, brightness limits, and brightness boost respond live', () => {
   a.density = 1; a.brightness = 0; assert(sum(snapshot([a])) === 0, 'Brightness ignored');
 });
 test('Preview resolution leaves image-relative cell count stable', () => {
-  fillWhite(); const a = createLayer('pixel', { cellSize: 16, size: 0.5 });
+  fillWhite(); const a = createLayer('squares', { cellSize: 16, size: 0.5 });
   const full = snapshot([a]); const fullRatio = sum(full) / (128 * 128);
   const half = snapshot([a], { maxEdge: 64 }); const halfRatio = sum(half) / (64 * 64);
   assert(Math.abs(fullRatio - halfRatio) / fullRatio < 0.15, 'Preview changed cell coverage');
 });
 test('Layer count does not grow framebuffer allocation', () => {
-  const layers = Array.from({ length: 12 }, () => createLayer('pixel', { opacity: 0.2 }));
+  const layers = Array.from({ length: 12 }, () => createLayer('squares', { opacity: 0.2 }));
   snapshot(layers); assert(renderer.targets.length === 5, 'Unbounded per-layer surfaces');
 });
 test('Linear and radial masks isolate regions and can be inverted', () => {
   fillWhite();
-  const layer = createLayer('pixel', { cellSize: 8, size: 1, colorMode: 'solid', color: '#ffffff', maskMode: 'linear', maskAngle: 0, maskPosition: 0.5, maskFeather: 0 });
+  const layer = createLayer('squares', { cellSize: 8, size: 1, colorMode: 'solid', color: '#ffffff', maskMode: 'linear', maskAngle: 0, maskPosition: 0.5, maskFeather: 0 });
   let image = snapshot([layer]);
   assert(pixel(image, 20, 20)[0] > 200 && pixel(image, 100, 20)[0] === 0, 'Linear mask failed');
   layer.maskInvert = true; image = snapshot([layer]);
@@ -120,14 +120,14 @@ test('Geometric hollow squares preserve their hole and respond to stroke width',
 });
 test('Spatial gradients color different regions without changing the selected shape', () => {
   fillWhite();
-  const layer = createLayer('pixel', { cellSize: 8, size: 1, colorMode: 'gradient', color: '#ff0000', color2: '#0000ff', colorShading: 0, colorAngle: 0 });
+  const layer = createLayer('squares', { cellSize: 8, size: 1, colorMode: 'gradient', color: '#ff0000', color2: '#0000ff', colorShading: 0, colorAngle: 0 });
   const image = snapshot([layer]);
   const left = pixel(image, 12, 24), right = pixel(image, 112, 24);
   assert(left[0] > 180 && left[2] < 60 && right[2] > 180 && right[0] < 60, 'Gradient color distribution failed');
 });
 test('Tone-dependent density concentrates marks in brighter source regions', () => {
   ctx.fillStyle = '#404040'; ctx.fillRect(0, 0, 64, 128); ctx.fillStyle = '#ffffff'; ctx.fillRect(64, 0, 64, 128); renderer.setSource(source);
-  const layer = createLayer('pixel', { cellSize: 8, size: 1, threshold: 0, densityShading: 1, colorMode: 'solid', color: '#ffffff' });
+  const layer = createLayer('squares', { cellSize: 8, size: 1, threshold: 0, densityShading: 1, colorMode: 'solid', color: '#ffffff' });
   const image = snapshot([layer]);
   let left = 0, right = 0;
   for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) { if (x < 64) left += pixel(image, x, y)[0]; else right += pixel(image, x, y)[0]; }
@@ -169,7 +169,7 @@ test('Tiny circular dots retain antialiased edges outside their nominal bounding
 });
 test('Ordered density gives exact coverage and stays independent of random seed', () => {
   fillWhite();
-  const layer = createLayer('pixel', { cellSize: 8, size: 1, density: 0.5, densityPattern: 'ordered' });
+  const layer = createLayer('squares', { cellSize: 8, size: 1, density: 0.5, densityPattern: 'ordered' });
   const first = snapshot([layer]);
   let occupied = 0;
   for (let y = 4; y < 128; y += 8) for (let x = 4; x < 128; x += 8) if (pixel(first, x, y)[0] > 200) occupied++;
@@ -181,7 +181,7 @@ test('Ordered density gives exact coverage and stays independent of random seed'
 test('Image detail preserves texture inside large colored cells', () => {
   const gradient = ctx.createLinearGradient(0, 0, 128, 0); gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#333333');
   ctx.fillStyle = gradient; ctx.fillRect(0, 0, 128, 128); renderer.setSource(source);
-  const layer = createLayer('pixel', { cellSize: 32, size: 1, colorMode: 'tint', color: '#ff0000' });
+  const layer = createLayer('squares', { cellSize: 32, size: 1, colorMode: 'tint', color: '#ff0000' });
   const flat = snapshot([layer]);
   assert(Math.abs(pixel(flat, 40, 48)[0] - pixel(flat, 55, 48)[0]) < 3, 'Baseline cell was not flat');
   layer.detail = 1;
@@ -318,17 +318,60 @@ test('Attached glow follows Pixel and ASCII layers and hides with its parent', (
   }
 });
 
-test('Square and hollow-square Pixels use the same painted regions as dot Pixels', () => {
+test('Square and hollow-square layers use the same painted regions as dot Pixels', () => {
   ctx.clearRect(0, 0, 128, 128); renderer.setSource(source);
   const mask = decodeSelection(); paintSelection(mask, .2, .2, 40, 128, 128);
   const settings = { cellSize: 8, density: 1, colorMode: 'solid', color: '#ffffff', selectionActive: true, selectionBits: encodeSelection(mask), threshold: 1 };
   for (const shape of ['square', 'box']) {
-    const layer = createLayer('pixel', { ...settings, pixelShape: shape });
+    const layer = createLayer('squares', { ...settings, pixelShape: shape });
     const image = snapshot([layer]);
     assert(sum(image) > 0 && pixel(image, 100, 100)[0] === 0, `${shape} did not obey the painted region`);
     layer.glowEnabled = true; layer.radius = 8; layer.strength = 2;
     assert(sum(snapshot([layer])) > sum(image), `${shape} glow is missing`);
   }
+});
+
+test('Every selectable geometric shape has a distinct nonempty analytic mask', () => {
+  fillWhite();
+  const ids = ['cross', 'x', 'asterisk', 'star', 'star5', 'diamond', 'triangle', 'ring', 'triangle-outline'];
+  const images = ids.map(id => snapshot([createLayer('shapes', { shapes: [id], cellSize: 32, size: .8, colorMode: 'solid', color: '#ffffff' })]));
+  for (let i = 0; i < ids.length; i++) {
+    assert(sum(images[i]) > 20000, `${ids[i]} did not render`);
+    for (let j = 0; j < i; j++) assert(images[i].some((v, k) => v !== images[j][k]), `${ids[i]} duplicates ${ids[j]}`);
+  }
+  const empty = createLayer('shapes', { shapes: [] });
+  assert(sum(snapshot([empty])) === 0, 'An empty set rendered fallback symbols');
+});
+
+test('Mixed Shapes keep their selection, color, glow and painted region independent', () => {
+  fillWhite();
+  const a = createLayer('shapes', { shapes: ['x', 'star5', 'ring'], cellSize: 16, colorMode: 'solid', color: '#00ff00' });
+  const b = createLayer('shapes', { shapes: ['star'], cellSize: 16, colorMode: 'solid', color: '#0000ff' });
+  const first = snapshot([b]), mixed = snapshot([a]);
+  a.shapes = ['triangle']; snapshot([a]);
+  const unchanged = snapshot([b]);
+  assert(first.every((v, i) => v === unchanged[i]), 'A changed B');
+  a.shapes = ['x', 'star5', 'ring'];
+  const repeated = snapshot([a]);
+  assert(mixed.every((v, i) => v === repeated[i]), 'Shape mixing is unstable');
+  const mask = decodeSelection(); paintSelection(mask, .2, .2, 40, 128, 128);
+  a.selectionActive = true; a.selectionBits = encodeSelection(mask);
+  const selected = snapshot([a]); assert(sum(selected) > 0 && pixel(selected, 100, 100)[1] === 0, 'Shapes escaped selection');
+  a.glowEnabled = true; a.radius = 8; a.strength = 2;
+  assert(sum(snapshot([a])) > sum(selected), 'Shapes glow missing');
+  assert(renderer.targets.length === 5, 'Shape layers allocated more render surfaces');
+});
+
+test('Legacy square and mixed-symbol migration preserves rendered output exactly', () => {
+  fillWhite();
+  const legacy = [
+    createLayer('pixel', { pixelShape: 'box', cellSize: 16, stroke: .2, offsetX: 2 }),
+    createLayer('ascii', { symbolMode: 'shapes', shapes: ['box', 'cross', 'star'], mapping: 'random', cellSize: 12, colorMode: 'solid', color: '#00ff00', glowEnabled: true }),
+  ];
+  const before = snapshot(legacy);
+  const migrated = normalizeProject({ version: 1, layers: legacy });
+  const after = snapshot(migrated.layers);
+  assert(before.every((v, i) => v === after[i]), 'Migration changed geometry or glow');
 });
 
 test('Large input processing and preview allocation stay bounded', () => {

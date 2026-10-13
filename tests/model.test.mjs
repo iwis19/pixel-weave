@@ -82,7 +82,7 @@ test('reference recipe uses an explicit dot-grid mode and remains editable', () 
   assert(original.layers[0].maskFeather >= 0.5);
   assert.equal(original.layers.at(-1).glowEnabled, true);
   assert(!original.layers.some(layer => layer.type === 'glow'));
-  assert(original.layers.find(layer => layer.type === 'pixel').cellSize > dotLayer.cellSize * 2);
+  assert(original.layers.find(layer => layer.type === 'squares').cellSize > dotLayer.cellSize * 2);
   const scaled = peonyProject(1800);
   assert.equal(scaled.layers[0].cellSize, original.layers[0].cellSize * 2);
 });
@@ -181,4 +181,27 @@ test('old dot selections migrate to a Pixel layer with their glow, mask and tran
   assert.equal(layer.selectionBits, bits); assert.equal(layer.offsetX, 12);
   assert.equal(layer.glowEnabled, true); assert.equal(layer.glowStyle, 'box'); assert.equal(layer.glowOpacity, .4);
   assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(project))), project);
+});
+
+test('the four layer types retain separate symbol controls and round-trip together', () => {
+  const layers = [createLayer('pixel'), createLayer('ascii', { characters: '01' }), createLayer('squares', { pixelShape: 'box' }), createLayer('shapes', { shapes: ['x', 'star5', 'ring'], glowEnabled: true })];
+  assert.equal(layers[0].pixelShape, 'dot');
+  assert.equal(layers[2].pixelShape, 'box');
+  assert.deepEqual(symbolsFor(layers[2]), []);
+  assert.deepEqual(symbolsFor(layers[3]), ['x', 'star5', 'ring']);
+  const restored = normalizeProject({ version: 1, layers });
+  assert.deepEqual(restored.layers, layers);
+  assert.deepEqual(createLayer('shapes').shapes, ['cross']);
+  layers[3].shapes.push('diamond');
+  assert.deepEqual(createLayer('shapes').shapes, ['cross']);
+});
+
+test('old square Pixels and ASCII shape sets migrate without losing drawing parameters', () => {
+  const mask = decodeSelection(); paintSelection(mask, .3, .4, 40, 128, 128);
+  const square = createLayer('pixel', { pixelShape: 'box', name: 'Outline', cellSize: 14, stroke: .2, selectionActive: true, selectionBits: encodeSelection(mask), glowEnabled: true });
+  const shapes = createLayer('ascii', { symbolMode: 'shapes', shapes: ['cross', 'box', 'star'], mapping: 'brightness', offsetX: 7, maskMode: 'linear' });
+  const migrated = normalizeProject({ version: 1, layers: [square, shapes] });
+  assert.deepEqual(migrated.layers[0], { ...square, type: 'squares' });
+  assert.deepEqual(migrated.layers[1], { ...shapes, type: 'shapes', name: 'Shapes' });
+  assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(migrated))), migrated);
 });

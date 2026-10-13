@@ -2,7 +2,10 @@ import { MASK_BYTES } from './selection.js';
 
 export const MAX_LAYERS = 12;
 export const MAX_SYMBOLS = 64;
-export const SHAPES = ['dot', 'square', 'box', 'cross', 'star', 'diamond'];
+// Keep the first six IDs stable for older project files and the analytic shader.
+export const SHAPES = ['dot', 'square', 'box', 'cross', 'star', 'diamond', 'x', 'asterisk', 'star5', 'triangle', 'ring', 'triangle-outline'];
+export const LAYER_NAMES = { pixel: 'Pixel', ascii: 'ASCII', squares: 'Squares', shapes: 'Shapes' };
+export const DRAWING_TYPES = Object.keys(LAYER_NAMES);
 export const BLENDS = ['normal', 'screen', 'add', 'multiply'];
 
 const defaults = {
@@ -40,23 +43,24 @@ const ranges = {
 };
 
 export function symbolsFor(layer) {
-  if (layer.type === 'pixel') return [];
+  if (['pixel', 'squares'].includes(layer.type)) return [];
   if (['dots', 'points'].includes(layer.symbolMode)) return [];
-  if (layer.symbolMode === 'shapes') return layer.shapes.filter(s => SHAPES.includes(s)).slice(0, MAX_SYMBOLS);
+  if (layer.type === 'shapes' || layer.symbolMode === 'shapes') return layer.shapes.filter(s => SHAPES.includes(s)).slice(0, SHAPES.length);
   return [...new Set(Array.from(layer.characters))].slice(0, MAX_SYMBOLS);
 }
 
 export function createLayer(type = 'ascii', overrides = {}) {
-  if (!['ascii', 'pixel', 'glow'].includes(type)) throw new Error('Unknown layer type');
-  const layer = { ...defaults, id: globalThis.crypto.randomUUID(), type, name: type === 'ascii' ? 'ASCII' : type === 'pixel' ? 'Pixels' : 'Glow', ...overrides };
-  if (type === 'pixel' && overrides.cellSize === undefined) layer.cellSize = 18;
+  if (![...DRAWING_TYPES, 'glow'].includes(type)) throw new Error('Unknown layer type');
+  const layer = { ...defaults, id: globalThis.crypto.randomUUID(), type, name: LAYER_NAMES[type] || 'Glow',
+    ...(type === 'pixel' ? { pixelShape: 'dot', cellSize: 9, threshold: 0 } : {}),
+    ...(type === 'shapes' ? { symbolMode: 'shapes', mapping: 'random' } : {}), ...overrides };
   if (type === 'glow' && overrides.blend === undefined) layer.blend = 'add';
   return normalizeLayer(layer);
 }
 
 export function normalizeLayer(input) {
   const previousDots = input.type === 'ascii' && input.symbolMode === 'points';
-  const type = previousDots ? 'pixel' : ['ascii', 'pixel', 'glow'].includes(input.type) ? input.type : 'ascii';
+  const type = previousDots ? 'pixel' : [...DRAWING_TYPES, 'glow'].includes(input.type) ? input.type : 'ascii';
   const out = { ...defaults, type };
   out.id = typeof input.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(input.id) ? input.id : globalThis.crypto.randomUUID();
   out.name = typeof input.name === 'string' ? input.name.slice(0, 60) : type;
@@ -90,12 +94,14 @@ export function normalizeLayer(input) {
     if (['Dots', 'Dot field', 'ASCII'].includes(out.name)) out.name = out.name === 'Dot field' ? 'Pixel field' : 'Pixels';
   }
   if (out.type === 'pixel') out.symbolMode = 'text';
+  if (out.type === 'squares') { out.symbolMode = 'text'; if (out.pixelShape === 'dot') out.pixelShape = 'square'; }
+  if (out.type === 'shapes') out.symbolMode = 'shapes';
   if (out.type === 'pixel' && out.pixelShape === 'dot') out.cellSize = Math.max(6, out.cellSize);
   return out;
 }
 
 export function defaultProject() {
-  const pixels = createLayer('pixel', { name: 'Soft pixels', cellSize: 16, size: 0.94, opacity: 0.32, threshold: 0.12 });
+  const pixels = createLayer('squares', { name: 'Soft squares', cellSize: 16, size: 0.94, opacity: 0.32, threshold: 0.12 });
   const ascii = createLayer('ascii', { name: 'Characters', cellSize: 9, threshold: 0.18, brightness: 1.2, glowEnabled: true, radius: 12, strength: 1.8 });
   return { version: 1, background: '#08090b', sourceOpacity: 0.2, sourceTint: '#ffffff', layers: [pixels, ascii] };
 }
@@ -105,6 +111,16 @@ export function normalizeProject(input) {
   if (input.layers.length > MAX_LAYERS) throw new Error(`Use up to ${MAX_LAYERS} layers`);
   if (input.layers.some(layer => !layer || typeof layer !== 'object' || Array.isArray(layer))) throw new Error('Invalid layer settings');
   const normalized = input.layers.map(layer => normalizeLayer(layer.type === 'ascii' && layer.symbolMode === 'dots' ? { ...layer, symbolMode: 'points' } : layer));
+  for (const layer of normalized) {
+    if (layer.type === 'pixel' && layer.pixelShape !== 'dot') {
+      layer.type = 'squares';
+      if (['Pixel', 'Pixels'].includes(layer.name)) layer.name = 'Squares';
+    } else if (layer.type === 'ascii' && layer.symbolMode === 'shapes') {
+      // Mixed legacy symbol sets retain their exact geometry and order.
+      layer.type = 'shapes';
+      if (layer.name === 'ASCII') layer.name = 'Shapes';
+    }
+  }
   const ids = new Set();
   for (const layer of normalized) {
     if (ids.has(layer.id)) throw new Error('Duplicate layer IDs');
