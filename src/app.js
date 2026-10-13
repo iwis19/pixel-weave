@@ -1,11 +1,12 @@
 import { Renderer } from './engine.js';
-import { createLayer, defaultProject, normalizeProject, normalizeName, projectFilename, MAX_LAYERS, LAYER_NAMES } from './model.js';
+import { createLayer, defaultProject, normalizeName, projectFilename, MAX_LAYERS, LAYER_NAMES } from './model.js';
 import { makeSample } from './sample.js';
 import { peonyProject, dotsProject, loadPeonySource } from './presets.js';
 import { SelectionEditor } from './selection-editor.js';
 import { initPanelResize } from './panel-resize.js';
 import { uiIcon } from './ui-icons.js';
 import { openShapePicker, shapeIcon, shapeInfo } from './shape-picker.js';
+import { encodeProjectFile, parseProjectFile, decodeProjectImage, MAX_PROJECT_BYTES } from './project-file.js';
 
 const $ = selector => document.querySelector(selector);
 const canvas = $('#preview');
@@ -20,6 +21,8 @@ let pendingFrame = 0;
 let original = false;
 let importGeneration = 0;
 let exporting = false;
+let saving = false;
+let projectLoadGeneration = 0;
 let messageTimer;
 let renderer;
 let previewArea = { width: 0, height: 0 };
@@ -494,6 +497,7 @@ async function importImage(file) {
   if (!file.type.startsWith('image/')) return message('Choose an image file.');
   if (file.size > 50 * 1024 * 1024) return message('Choose an image smaller than 50 MB.');
   const generation = ++importGeneration;
+  projectLoadGeneration++;
   const url = URL.createObjectURL(file);
   let image;
   try {
@@ -524,22 +528,48 @@ function download(blob, filename) {
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-$('#save-project').addEventListener('click', () => download(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${projectFilename(project.name)}.pixel-weave.json`));
+$('#save-project').addEventListener('click', async () => {
+  if (saving) return;
+  saving = true;
+  const button = $('#save-project'); button.disabled = true; button.textContent = 'Saving…';
+  const filename = `${projectFilename(project.name)}.pixelweave`;
+  try {
+    const file = await encodeProjectFile(project, renderer?.sourceCanvas, $('#image-name').textContent);
+    download(file, filename);
+  } catch (error) { message(error.message); }
+  finally { saving = false; button.disabled = false; button.textContent = 'Save project'; }
+});
 $('#project-input').addEventListener('change', async event => {
   const file = event.target.files[0]; event.target.value = '';
   if (!file) return;
-  if (file.size > 1024 * 1024) return message('Choose a settings file smaller than 1 MB.');
+  if (file.type.startsWith('image/')) return message('Use Open image for pictures. Load project opens editable projects.');
+  if (file.size > MAX_PROJECT_BYTES) return message('Choose a project smaller than 32 MB.');
+  const generation = ++projectLoadGeneration;
+  const button = $('#load-project'); button.disabled = true; button.textContent = 'Loading…';
+  let image;
   try {
-    const nextProject = normalizeProject(JSON.parse(await file.text()));
-    project = nextProject;
+    const loaded = parseProjectFile(await file.text());
+    if (loaded.source) image = await decodeProjectImage(loaded.source);
+    if (generation !== projectLoadGeneration) return;
+    if (loaded.source) {
+      // A restored project owns its image; cancel a pending sample or image import.
+      importGeneration++;
+      renderer.setSource(image);
+      $('#image-name').textContent = loaded.source.name;
+      renderReference();
+    } else if (renderer.sourceCanvas) importGeneration++;
+    project = loaded.project;
     selectionEditor.stop();
+    original = false; $('#compare').setAttribute('aria-pressed', false);
     selectedId = project.layers.at(-1)?.id;
     $('#background').value = project.background;
     $('#source-tint').value = project.sourceTint;
     $('#source-opacity').value = project.sourceOpacity;
     $('#source-opacity-value').textContent = percent(project.sourceOpacity);
     renderUI(); scheduleRender();
-  } catch (error) { message(error.message || 'Could not load settings.'); }
+    if (!loaded.source) message('Loaded settings. The current reference image stays in place.');
+  } catch (error) { if (generation === projectLoadGeneration) message(error.message || 'Could not load the project.'); }
+  finally { if (image) image.src = ''; button.disabled = false; button.textContent = 'Load project'; }
 });
 
 $('#export-image').addEventListener('click', async () => {

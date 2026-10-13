@@ -15,9 +15,9 @@
       <div class="workspace-identity"><span class="wordmark">Pixel Weave</span><button id="project-name" class="project-name" type="button" aria-label="Rename project" title="Rename project"><span>Untitled</span></button></div>
       <div class="toolbar-actions">
         <select id="preset" aria-label="Layer preset" title="Layer preset"><option value="dots">Pixel</option><option value="peony">Red / lilac</option><option value="neutral">Neutral</option><option value="custom" disabled>Custom</option></select>
-        <button id="save-project" title="Save layer settings">Save</button>
-        <button id="load-project" title="Load layer settings">Load</button>
-        <button id="export-image" class="primary">Export PNG</button>
+        <button id="load-project" title="Restore an editable project and its source image">Load project</button>
+        <button id="save-project" title="Save the source image and editable layers as a .pixelweave file">Save project</button>
+        <button id="export-image" class="primary" title="Download the finished image without editable layers">Export PNG</button>
       </div>
     </header>
     <main>
@@ -57,6 +57,6 @@
     </main>
     <div id="message" role="status" hidden></div>
     <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp" hidden />
-    <input id="project-input" type="file" accept="application/json,.json" hidden />
+    <input id="project-input" type="file" accept=".pixelweave,application/json,.json" hidden />
   </body>
 </html>
