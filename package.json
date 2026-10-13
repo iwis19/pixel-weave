@@ -1,0 +1,13 @@
+{
+  "name": "ascii-effects",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/model.test.mjs",
+    "check": "node --check src/engine.js && node --check src/shaders.js && node --check src/model.js && node --check src/app.js && node --check src/presets.js && node --check src/dot-glyphs.js && node --check examples/peony.js && node --check examples/dots.js && node --check examples/source-preparation.js"
+  }
+}

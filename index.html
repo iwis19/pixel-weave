@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111112" />
+    <title>ASCII Effects</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <script type="module" src="/src/app.js"></script>
+  </head>
+  <body>
+    <header class="toolbar">
+      <span class="wordmark">ASCII<span class="wordmark-dot">·</span>Effects</span>
+      <div class="toolbar-actions">
+        <select id="preset" aria-label="Layer preset" title="Layer preset"><option value="dots">Dots</option><option value="peony">Red / lilac</option><option value="neutral">Neutral</option><option value="custom" disabled>Custom</option></select>
+        <button id="open-image">Open image</button>
+        <button id="save-project" title="Save layer settings">Save</button>
+        <button id="load-project" title="Load layer settings">Load</button>
+        <button id="export-image" class="primary">Export PNG</button>
+      </div>
+    </header>
+    <main>
+      <section class="workspace" id="workspace" aria-label="Image preview">
+        <div class="canvas-wrap" id="canvas-wrap"><canvas id="preview" aria-label="Rendered image"></canvas></div>
+        <div class="preview-bar">
+          <span id="image-name">Peony</span>
+          <div class="preview-options">
+            <button id="compare" aria-pressed="false" title="Toggle original image">Original</button>
+            <label class="quality-label">Preview <select id="quality" aria-label="Preview resolution"><option value="768">768 px</option><option value="1280" selected>1280 px</option><option value="1920">1920 px</option></select></label>
+            <output id="render-status" aria-live="off"></output>
+          </div>
+        </div>
+        <div id="drop-overlay">Drop image</div>
+      </section>
+      <aside class="sidebar" aria-label="Layer workspace">
+        <section class="composition-controls">
+          <div class="section-label">Canvas</div>
+          <label class="inline-control">Background <input type="color" id="background" value="#08090b" /></label>
+          <label class="range-control"><span>Image <output id="source-opacity-value">20%</output></span><input id="source-opacity" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
+          <label class="inline-control">Image tint <input type="color" id="source-tint" value="#ffffff" /></label>
+        </section>
+        <section class="layers-section">
+          <div class="section-header"><span class="section-label">Layers</span><div class="add-actions"><button data-add="ascii">+ ASCII</button><button data-add="pixel">+ Pixel</button><button data-add="glow">+ Glow</button></div></div>
+          <div id="layers" class="layer-list" aria-label="Layers, top to bottom"></div>
+        </section>
+        <section id="inspector" class="inspector" aria-label="Selected layer controls"></section>
+      </aside>
+    </main>
+    <div id="message" role="status" hidden></div>
+    <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp" hidden />
+    <input id="project-input" type="file" accept="application/json,.json" hidden />
+  </body>
+</html>

@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dot rendering comparison</title>
+<style>
+body{margin:0;padding:24px;background:#131316;color:#b5b5c0;font:12px system-ui}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}a{color:#d3dcff;text-decoration:none}main{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}figure{margin:0;min-width:0}figcaption{margin-bottom:12px}canvas,img{display:block;width:100%;aspect-ratio:1.25;object-fit:contain;background:#0b0b0b}button{border:1px solid #3c3c45;background:#23232a;color:#ddd;padding:7px 12px;border-radius:4px;cursor:pointer}#status{margin-top:16px;font-variant-numeric:tabular-nums}@media(max-width:650px){main{grid-template-columns:1fr}}
+</style><script type="module" src="./dots.js"></script></head><body>
+<header><a href="/?preset=dots">Workspace</a><div><button id="detail">Export detail</button> <button id="export">Export dots</button></div></header>
+<main><figure><figcaption>Source</figcaption><canvas id="source"></canvas></figure><figure><figcaption><a href="https://pixel-to-character.vercel.app/">Reference tool</a></figcaption><img src="/assets/dot-tool-reference.png" alt="The same flower rendered by pixel-to-character with its default Dots settings"></figure><figure><figcaption>Our dots</figcaption><canvas id="result"></canvas></figure></main>
+<p id="status">Rendering</p></body></html>
