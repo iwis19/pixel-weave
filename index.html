@@ -13,13 +13,28 @@
       <span class="wordmark">ASCII<span class="wordmark-dot">·</span>Effects</span>
       <div class="toolbar-actions">
         <select id="preset" aria-label="Layer preset" title="Layer preset"><option value="dots">Pixel</option><option value="peony">Red / lilac</option><option value="neutral">Neutral</option><option value="custom" disabled>Custom</option></select>
-        <button id="open-image">Open image</button>
         <button id="save-project" title="Save layer settings">Save</button>
         <button id="load-project" title="Load layer settings">Load</button>
         <button id="export-image" class="primary">Export PNG</button>
       </div>
     </header>
     <main>
+      <aside class="library-panel" aria-label="Image and layers">
+        <section class="reference-section">
+          <div class="section-header"><span class="section-label">Reference</span><button id="open-image">Open image</button></div>
+          <canvas id="reference-thumbnail" width="240" height="144" role="img" aria-label="Reference image"></canvas>
+          <label class="range-control"><span>Image opacity <output id="source-opacity-value">55%</output></span><input id="source-opacity" aria-label="Image opacity" type="range" min="0" max="1" step="0.01" value="0.55" /></label>
+          <div class="canvas-colors">
+            <label class="inline-control">Tint <input type="color" id="source-tint" aria-label="Image tint" value="#ffffff" /></label>
+            <label class="inline-control">Background <input type="color" id="background" aria-label="Background" value="#08090b" /></label>
+          </div>
+        </section>
+        <section class="layers-section">
+          <div class="section-header"><span class="section-label">Layers</span></div>
+          <div class="add-actions"><button data-add="ascii">+ ASCII</button><button data-add="pixel">+ Pixel</button></div>
+          <div id="layers" class="layer-list" aria-label="Layers, top to bottom"></div>
+        </section>
+      </aside>
       <section class="workspace" id="workspace" aria-label="Image preview">
         <div class="canvas-wrap" id="canvas-wrap"><div class="preview-surface" id="preview-surface"><canvas id="preview" aria-label="Rendered image"></canvas><canvas id="selection-overlay" aria-hidden="true" hidden></canvas><button id="paint-surface" class="paint-surface" type="button" aria-label="Draw selection on image. Hold left click and drag. Arrow keys move the brush; Space paints; Escape exits drawing." disabled></button><span id="brush-cursor" class="brush-cursor" aria-hidden="true"></span></div></div>
         <div class="preview-bar">
@@ -32,17 +47,7 @@
         </div>
         <div id="drop-overlay">Drop image</div>
       </section>
-      <aside class="sidebar" aria-label="Layer workspace">
-        <section class="composition-controls">
-          <div class="section-label">Canvas</div>
-          <label class="inline-control">Background <input type="color" id="background" value="#08090b" /></label>
-          <label class="range-control"><span>Image <output id="source-opacity-value">20%</output></span><input id="source-opacity" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
-          <label class="inline-control">Image tint <input type="color" id="source-tint" value="#ffffff" /></label>
-        </section>
-        <section class="layers-section">
-          <div class="section-header"><span class="section-label">Layers</span><div class="add-actions"><button data-add="ascii">+ ASCII</button><button data-add="pixel">+ Pixel</button></div></div>
-          <div id="layers" class="layer-list" aria-label="Layers, top to bottom"></div>
-        </section>
+      <aside class="inspector-panel" aria-label="Layer inspector">
         <section id="inspector" class="inspector" aria-label="Selected layer controls"></section>
       </aside>
     </main>

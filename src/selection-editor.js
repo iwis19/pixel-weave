@@ -21,17 +21,18 @@ export class SelectionEditor {
     const actions = document.createElement('div'); actions.className = 'selection-actions';
     this.drawButton = button('Draw selection', () => { this.drawing = !this.drawing; this.erase = false; if (this.drawing) this.onEditStart(); this.update(); });
     this.clearButton = button('Clear', () => { this.mask.fill(0); layer.selectionBits = ''; layer.selectionActive = false; this.erase = false; this.update(); this.onChange(); });
-    actions.append(this.drawButton, this.clearButton);
+    this.eraseButton = button('Erase', () => { this.erase = !this.erase; this.update(); });
+    this.eraseButton.className = 'erase-selection';
+    actions.append(this.drawButton, this.eraseButton, this.clearButton);
     const mapWrap = document.createElement('div'); mapWrap.className = 'selection-map';
+    this.mapWrap = mapWrap;
     this.map = document.createElement('canvas'); this.map.width = 320; this.map.height = 256;
     this.map.setAttribute('role', 'img'); this.map.setAttribute('aria-label', 'Distribution selection map');
     this.mapSurface = button('', () => {}); this.mapSurface.className = 'paint-surface';
     this.mapSurface.setAttribute('aria-label', 'Draw selection on distribution map. Arrow keys move the brush; Space paints; Escape exits drawing.');
     this.mapCursor = document.createElement('span'); this.mapCursor.className = 'brush-cursor'; this.mapCursor.setAttribute('aria-hidden', 'true');
     mapWrap.append(this.map, this.mapSurface, this.mapCursor);
-    this.eraseButton = button('Erase', () => { this.erase = !this.erase; this.update(); });
-    this.eraseButton.className = 'erase-selection';
-    parent.append(actions, mapWrap, this.eraseButton);
+    parent.append(actions, mapWrap);
     this.bind(this.mapSurface, this.mapCursor);
     this.update();
   }
@@ -57,6 +58,7 @@ export class SelectionEditor {
       const renderer = this.getRenderer(), source = renderer?.sourceCanvas;
       const height = Math.max(1, Math.round(320 * (source ? source.height / source.width : .8)));
       if (this.map.height !== height) this.map.height = height;
+      this.mapWrap.style.width = `${Math.min(240, 160 * 320 / height)}px`;
       const mc = this.map.getContext('2d'); mc.fillStyle = '#08090c'; mc.fillRect(0, 0, 320, height);
       if (source) mc.drawImage(source, 0, 0, 320, height);
       mc.globalAlpha = .5; mc.drawImage(this.maskCanvas, 0, 0, 320, height); mc.globalAlpha = 1;

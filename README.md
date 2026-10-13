@@ -1,6 +1,6 @@
 # ASCII Effects — phase 1
 
-A browser-local image renderer with ASCII and Pixel layers, each with its own glow controls. Vanilla JavaScript, WebGL 2, no runtime dependencies, no image uploads, and no build step. The current interface is a control surface for developing the engine; visual frontend design remains open.
+A browser-local image renderer with ASCII and Pixel layers, each with its own glow controls. Vanilla JavaScript, WebGL 2, no runtime dependencies, no image uploads, and no build step.
 
 [Open the live workspace](https://ascii-effects-studio.ronniegoo.chatgpt.site). The deployment is private and starts with the Pixel preset using the Dot shape.
 
@@ -16,6 +16,7 @@ Open http://127.0.0.1:5173. `npm install` is unnecessary. The server binds to lo
 
 ## Use
 
+- Reference image, image opacity, tint, background, and the layer stack live on the left; the preview stays in the center. The right inspector has direct Shape, Color, Distribution, Glow, and Transform tabs, plus Sampling for ASCII. Each layer remembers its active tab. The panels replace the long accordion list; drawing stays active across tabs. Tablet layouts put image and layers above the preview, and narrow screens stack the inspector below it.
 - Open or drop an image. A prepared peony photo is available immediately with the Pixel preset. Red / lilac applies the layered flower recipe to your current image; its cell sizes adapt to the reference width. Neutral restores the initial basic stack. Edits change the selector to Custom.
 - Add ASCII or Pixel layers. The list displays topmost layers first. Use the arrows to reorder, the circle to hide, and the inspector to duplicate or delete. Glow is an on/off option inside either layer; it has no separate layer entry.
 - An ASCII layer explicitly selects Characters or Shapes. Empty character/shape selections draw nothing. Characters are ordered from low to high brightness; random distribution and reverse order are available. Unicode characters render through the browser's monospace font and fallback fonts. Geometric symbols render analytically on the GPU, with editable stroke width for hollow squares, crosses, and diamonds.

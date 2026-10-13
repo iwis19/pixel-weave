@@ -66,10 +66,10 @@ function controlElement(tag, attributes = {}, text = '') {
   if (text) element.textContent = text;
   return element;
 }
-function group(label) {
+function group(label, parent = inspector) {
   const section = controlElement('div', { class: 'control-group' });
   if (label) section.append(controlElement('div', { class: 'group-label' }, label));
-  inspector.append(section);
+  parent.append(section);
   return section;
 }
 const percent = value => `${Math.round(value * 100)}%`;
@@ -131,172 +131,203 @@ function color(parent) {
   }
 }
 
-function glowControls() {
-  const layer = selectedLayer(), glow = group();
-  const label = controlElement('label', { class: 'inline-control' }, 'Glow');
-  const enabled = controlElement('input', { type: 'checkbox', 'aria-label': 'Glow' });
+const inspectorTabs = new Map();
+
+function toggle(parent, key, label) {
+  const layer = selectedLayer();
+  const wrapper = controlElement('label', { class: 'inline-control' }, label);
+  const input = controlElement('input', { type: 'checkbox', 'data-key': key, 'aria-label': label });
+  input.checked = layer[key];
+  input.addEventListener('change', () => { layer[key] = input.checked; scheduleRender(); });
+  wrapper.append(input); parent.append(wrapper);
+}
+
+function transformControls(parent) {
+  const layer = selectedLayer();
+  range(parent, 'scale', 'Scale', .25, 3);
+  const limit = Math.min(4096, Math.max(renderer?.referenceWidth || 1024, renderer?.referenceHeight || 1024));
+  const offsets = controlElement('div', { class: 'paired-controls' }); parent.append(offsets);
+  range(offsets, 'offsetX', 'Offset X', -limit, limit, 1, px);
+  range(offsets, 'offsetY', 'Offset Y', -limit, limit, 1, px);
+  const reset = controlElement('button', { class: 'reset-transform' }, 'Reset transform');
+  reset.addEventListener('click', () => { layer.scale = 1; layer.offsetX = layer.offsetY = 0; renderInspector(); scheduleRender(); });
+  parent.append(reset);
+}
+
+function glowControls(parent) {
+  const layer = selectedLayer();
+  const label = controlElement('label', { class: 'inline-control glow-toggle' }, 'Glow');
+  const enabled = controlElement('input', { type: 'checkbox', 'data-key': 'glowEnabled', 'aria-label': 'Glow' });
   enabled.checked = layer.glowEnabled;
   enabled.addEventListener('change', () => { layer.glowEnabled = enabled.checked; renderInspector(); scheduleRender(); });
-  label.append(enabled); glow.append(label);
-  if (!layer.glowEnabled) return;
-  select(glow, 'glowStyle', 'Style', [['soft', 'Soft'], ['box', 'Box']]);
-  range(glow, 'strength', 'Strength', 0, 6);
-  range(glow, 'radius', 'Radius', 0, 80, 1, px);
+  label.append(enabled); parent.append(label);
+  const controls = controlElement('div', { class: 'glow-controls' });
+  select(controls, 'glowStyle', 'Style', [['soft', 'Soft'], ['box', 'Box']]);
+  range(controls, 'strength', 'Strength', 0, 6);
+  range(controls, 'radius', 'Radius', 0, 80, 1, px);
+  controls.querySelectorAll('input, select').forEach(input => { input.disabled = !layer.glowEnabled; });
+  if (!layer.glowEnabled) controls.classList.add('inactive');
+  parent.append(controls);
 }
 
 function renderInspector() {
+  const focusKey = inspector.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   inspector.replaceChildren();
   const layer = selectedLayer();
-  if (!layer) { selectionEditor.stop(); return; }
+  if (!layer) {
+    selectionEditor.stop();
+    inspector.append(controlElement('div', { class: 'empty-inspector' }, 'Select or add a layer'));
+    return;
+  }
   if (layer.type !== 'pixel') selectionEditor.stop();
   const header = controlElement('div', { class: 'inspector-header' });
+  const identity = controlElement('div', { class: 'inspector-identity' });
+  identity.append(controlElement('span', { class: 'section-label' }, layer.type === 'pixel' ? 'Pixel layer' : 'ASCII layer'));
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
   name.addEventListener('input', () => { layer.name = name.value; renderLayers(); });
+  identity.append(name);
   const duplicate = controlElement('button', { title: 'Duplicate layer', 'aria-label': 'Duplicate layer' }, '⧉');
   duplicate.addEventListener('click', () => {
     if (project.layers.length >= MAX_LAYERS) return message(`Use up to ${MAX_LAYERS} layers`);
     const copy = createLayer(layer.type, { ...layer, id: crypto.randomUUID(), name: `${layer.name} copy` });
     project.layers.splice(project.layers.indexOf(layer) + 1, 0, copy);
+    inspectorTabs.set(copy.id, inspectorTabs.get(layer.id) || 'shape');
     selectedId = copy.id; renderUI(); scheduleRender();
   });
   const remove = controlElement('button', { title: 'Delete layer', 'aria-label': 'Delete layer', class: 'delete-layer' }, '×');
   remove.addEventListener('click', () => {
     const index = project.layers.indexOf(layer);
-    project.layers.splice(index, 1);
+    project.layers.splice(index, 1); inspectorTabs.delete(layer.id);
     for (const other of project.layers) if (other.glowSource === layer.id) other.glowSource = 'source';
     selectedId = project.layers[Math.min(index, project.layers.length - 1)]?.id;
     renderUI(); scheduleRender();
   });
-  header.append(name, duplicate, remove); inspector.append(header);
+  header.append(identity, duplicate, remove); inspector.append(header);
 
-  if (layer.type === 'pixel') {
-    select(inspector, 'pixelShape', 'Shape', [['dot', 'Dot'], ['square', 'Square'], ['box', 'Hollow square']], true);
-    const grid = group('Grid');
-    range(grid, 'cellSize', 'Spacing', layer.pixelShape === 'dot' ? 6 : 2, 100, .01, px);
-    if (layer.pixelShape === 'dot') range(grid, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
-    else range(grid, 'size', 'Pixel size', .1, 1, .01, percent);
-    if (layer.pixelShape === 'box') range(grid, 'stroke', 'Stroke width', .02, .4, .01, percent);
-    const swatch = controlElement('label', { class: 'inline-control' }, 'Color');
-    const ink = controlElement('input', { type: 'color', value: layer.color, 'aria-label': 'Pixel color' });
-    ink.addEventListener('input', () => { layer.color = ink.value; layer.colorMode = 'solid'; const mode = inspector.querySelector('[data-key="colorMode"]'); if (mode) mode.value = 'solid'; scheduleRender(); });
-    swatch.append(ink); grid.append(swatch);
-    const distribution = group('Distribution');
-    selectionEditor.inspect(distribution);
-    range(distribution, 'brushSize', 'Brush size', 10, 500, 10, px);
-    range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
-    range(distribution, 'clumping', 'Clumping', 0, 1, .01, percent);
-    glowControls();
-    const transform = controlElement('details'); transform.append(controlElement('summary', {}, 'Transform')); inspector.append(transform);
-    range(transform, 'scale', 'Scale', .25, 3);
-    const limit = Math.min(4096, Math.max(renderer?.referenceWidth || 1024, renderer?.referenceHeight || 1024));
-    range(transform, 'offsetX', 'Offset X', -limit, limit, 1, px);
-    range(transform, 'offsetY', 'Offset Y', -limit, limit, 1, px);
-    const appearance = controlElement('details'); appearance.append(controlElement('summary', {}, 'Appearance')); inspector.append(appearance);
-    range(appearance, 'opacity', 'Opacity', 0, 1, .01, percent);
-    select(appearance, 'blend', 'Blend', [['normal', 'Normal'], ['screen', 'Screen'], ['add', 'Add'], ['multiply', 'Multiply']]);
-    color(appearance);
-    return;
+  const sections = [['shape', 'Shape'], ['color', 'Color'], ['distribution', 'Distribution'],
+    ...(layer.type === 'ascii' ? [['sampling', 'Sampling']] : []), ['glow', 'Glow'], ['transform', 'Transform']];
+  const navigation = controlElement('div', { class: 'inspector-tabs', role: 'tablist', 'aria-label': 'Layer settings' });
+  const body = controlElement('div', { class: 'inspector-body' });
+  const panels = new Map(), tabs = [];
+  const activate = key => {
+    inspectorTabs.set(layer.id, key);
+    for (const [id, panel] of panels) panel.hidden = id !== key;
+    for (const tab of tabs) {
+      const selected = tab.dataset.tab === key;
+      tab.setAttribute('aria-selected', selected); tab.tabIndex = selected ? 0 : -1;
+    }
+    body.scrollTop = 0;
+  };
+  for (const [key, label] of sections) {
+    const tab = controlElement('button', { id: `tab-${key}`, role: 'tab', 'data-tab': key, 'aria-controls': `panel-${key}`, type: 'button' }, label);
+    const panel = controlElement('section', { id: `panel-${key}`, class: 'inspector-tab-panel', role: 'tabpanel', 'aria-labelledby': tab.id, tabindex: '0' });
+    tabs.push(tab); panels.set(key, panel);
+    tab.addEventListener('click', () => activate(key));
+    tab.addEventListener('keydown', event => {
+      const current = tabs.indexOf(tab);
+      let next;
+      if (['ArrowRight', 'ArrowDown'].includes(event.key)) next = (current + 1) % tabs.length;
+      else if (['ArrowLeft', 'ArrowUp'].includes(event.key)) next = (current + tabs.length - 1) % tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      if (next === undefined) return;
+      event.preventDefault(); activate(tabs[next].dataset.tab); tabs[next].focus();
+    });
+    navigation.append(tab); body.append(panel);
   }
-
-  const appearance = group('Appearance');
-  range(appearance, 'opacity', 'Opacity', 0, 1, 0.01, percent);
-  select(appearance, 'blend', 'Blend', [['normal', 'Normal'], ['screen', 'Screen'], ['add', 'Add'], ['multiply', 'Multiply']]);
-  color(appearance);
-
-  if (layer.type === 'ascii') {
-    const symbols = group('Symbols');
-    select(symbols, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes']], true);
+  inspector.append(navigation, body);
+  const shape = panels.get('shape');
+  if (layer.type === 'pixel') {
+    select(shape, 'pixelShape', 'Shape', [['dot', 'Dot'], ['square', 'Square'], ['box', 'Hollow square']], true);
+    range(shape, 'cellSize', 'Spacing', layer.pixelShape === 'dot' ? 6 : 2, 100, .01, px);
+    if (layer.pixelShape === 'dot') range(shape, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
+    else range(shape, 'size', 'Pixel size', .1, 1, .01, percent);
+    if (layer.pixelShape === 'box') range(shape, 'stroke', 'Stroke width', .02, .4, .01, percent);
+  } else {
+    select(shape, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes']], true);
     if (layer.symbolMode === 'text') {
       const label = controlElement('label', { class: 'text-control' }, 'Characters');
-      const input = controlElement('input', { type: 'text', value: layer.characters, 'aria-label': 'Characters', spellcheck: 'false', class: 'characters-input' });
+      const input = controlElement('input', { type: 'text', value: layer.characters, 'data-key': 'characters', 'aria-label': 'Characters', spellcheck: 'false', class: 'characters-input' });
       input.addEventListener('input', () => { layer.characters = Array.from(input.value).slice(0, 64).join(''); scheduleRender(); });
-      label.append(input); symbols.append(label);
-    } else if (layer.symbolMode === 'shapes') {
+      label.append(input); shape.append(label);
+    } else {
       const chips = controlElement('div', { class: 'shape-chips', role: 'group', 'aria-label': 'Shapes' });
-      const names = { dot: '●', square: '■', box: '□', cross: '+', star: '✦', diamond: '◇' };
-      for (const shape of SHAPES.filter(shape => shape !== 'dot')) {
-        const button = controlElement('button', { 'aria-label': shape, title: shape, 'aria-pressed': layer.shapes.includes(shape) }, names[shape]);
+      const names = { square: '■', box: '□', cross: '+', star: '✦', diamond: '◇' };
+      for (const symbol of SHAPES.filter(value => value !== 'dot')) {
+        const button = controlElement('button', { 'aria-label': symbol, title: symbol, 'aria-pressed': layer.shapes.includes(symbol) }, names[symbol]);
         button.addEventListener('click', () => {
-          layer.shapes = layer.shapes.includes(shape) ? layer.shapes.filter(value => value !== shape) : [...layer.shapes, shape];
+          layer.shapes = layer.shapes.includes(symbol) ? layer.shapes.filter(value => value !== symbol) : [...layer.shapes, symbol];
           renderInspector(); scheduleRender();
         });
         chips.append(button);
       }
-      symbols.append(chips);
-    } else {
-      range(symbols, 'dotRows', 'Dot rows', 2, 8, 1, value => String(value));
-      range(symbols, 'dotAspect', 'Cell aspect', 0.4, 1.4);
-      range(symbols, 'dotEdges', 'Edge detail', 0, 1, 0.01, percent);
+      shape.append(chips);
     }
-    if (layer.symbolMode !== 'dots') select(symbols, 'mapping', 'Distribution', [['brightness', 'Brightness'], ['random', 'Random']], true);
-    const invert = controlElement('label', { class: 'inline-control' }, 'Reverse order');
-    const checkbox = controlElement('input', { type: 'checkbox', 'aria-label': 'Reverse symbol order' });
-    checkbox.checked = layer.invert;
-    checkbox.addEventListener('change', () => { layer.invert = checkbox.checked; scheduleRender(); });
-    invert.append(checkbox); symbols.append(invert);
+    range(shape, 'cellSize', 'Spacing', 2, 100, .25, px);
+    range(shape, 'size', 'Symbol size', .1, 1, .01, percent);
+    range(shape, 'toneSize', 'Size by tone', 0, 1, .01, percent);
+    if (layer.symbolMode === 'shapes' && layer.shapes.some(value => ['box', 'cross', 'diamond'].includes(value))) range(shape, 'stroke', 'Stroke width', .02, .4, .01, percent);
+    toggle(shape, 'invert', 'Reverse symbol order');
   }
 
-  if (layer.type === 'glow') {
-    const glow = group('Glow');
-    const index = project.layers.indexOf(layer);
-    const targets = project.layers.slice(0, index).filter(value => value.type !== 'glow');
-    select(glow, 'glowSource', 'Target', [['source', 'Image'], ['below', 'Layers below'], ...targets.map(value => [value.id, value.name || value.type])]);
-    select(glow, 'glowStyle', 'Style', [['soft', 'Soft'], ['box', 'Box']], true);
-    range(glow, 'strength', 'Strength', 0, 6);
-    range(glow, 'radius', 'Radius', 0, 80, 1, px);
-    if (layer.glowStyle === 'box') range(glow, 'cellSize', 'Cell size', 2, 100, 0.25, px);
+  const appearance = panels.get('color');
+  color(appearance);
+  const compositing = group('Compositing', appearance);
+  range(compositing, 'opacity', 'Opacity', 0, 1, .01, percent);
+  select(compositing, 'blend', 'Blend', [['normal', 'Normal'], ['screen', 'Screen'], ['add', 'Add'], ['multiply', 'Multiply']]);
+
+  transformControls(panels.get('transform'));
+  const distribution = panels.get('distribution');
+  if (layer.type === 'pixel') {
+    range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
+    range(distribution, 'clumping', 'Clumping', 0, 1, .01, percent);
+    const selection = group('Selection', distribution);
+    range(selection, 'brushSize', 'Brush size', 10, 500, 10, px);
+    selectionEditor.inspect(selection);
   } else {
-    const grid = group('Grid');
-    if (layer.type === 'pixel') select(grid, 'pixelShape', 'Shape', [['square', 'Square'], ['dot', 'Dot'], ['box', 'Hollow square']], true);
-    range(grid, 'cellSize', 'Cell size', 2, 100, 0.25, px);
-    const dotGrid = layer.type === 'ascii' && layer.symbolMode === 'dots';
-    range(grid, 'size', dotGrid ? 'Dot size' : layer.type === 'ascii' ? 'Symbol size' : 'Pixel size', 0.1, 1, 0.01, percent);
-    if (!dotGrid) range(grid, 'toneSize', 'Size by tone', 0, 1, 0.01, percent);
-    if ((layer.type === 'ascii' && layer.symbolMode === 'shapes' && layer.shapes.some(shape => ['box', 'cross', 'diamond'].includes(shape))) || (layer.type === 'pixel' && layer.pixelShape === 'box')) range(grid, 'stroke', 'Stroke width', 0.02, 0.4, 0.01, percent);
-    range(grid, 'density', 'Density', 0, 1, 0.01, percent);
-    if (!dotGrid) {
-      select(grid, 'densityPattern', 'Spacing', [['random', 'Random'], ['ordered', 'Ordered']], true);
-      range(grid, 'densityShading', 'Density by tone', 0, 1, 0.01, percent);
+    select(distribution, 'mapping', 'Symbol mapping', [['brightness', 'Brightness'], ['random', 'Random']], true);
+    range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
+    select(distribution, 'densityPattern', 'Pattern', [['random', 'Random'], ['ordered', 'Ordered']], true);
+    range(distribution, 'densityShading', 'Density by tone', 0, 1, .01, percent);
+    range(distribution, 'densityGamma', 'Tone curve', .2, 4);
+    if (layer.densityPattern === 'random' || layer.mapping === 'random') range(distribution, 'seed', 'Seed', 0, 9999, 1, String);
+    const mask = group('', panels.get('transform')); mask.classList.add('transform-region');
+    select(mask, 'maskMode', 'Region', [['none', 'All'], ['linear', 'Linear'], ['radial', 'Radial']], true);
+    if (layer.maskMode !== 'none') {
+      if (layer.maskMode === 'linear') {
+        range(mask, 'maskAngle', 'Angle', -180, 180, 1, value => `${value}°`);
+        range(mask, 'maskPosition', 'Position', 0, 1, .01, percent);
+      } else {
+        const center = controlElement('div', { class: 'paired-controls' }); mask.append(center);
+        range(center, 'maskX', 'Center X', 0, 1, .01, percent);
+        range(center, 'maskY', 'Center Y', 0, 1, .01, percent);
+      }
+      const softness = controlElement('div', { class: layer.maskMode === 'radial' ? 'paired-controls' : '' }); mask.append(softness);
+      if (layer.maskMode === 'radial') range(softness, 'maskRadius', 'Mask radius', .05, 1.5, .01, percent);
+      range(softness, 'maskFeather', 'Feather', 0, 1, .01, percent);
+      select(mask, 'maskEdges', 'Edges', [['fade', 'Fade'], ['scatter', 'Scatter']]);
+      toggle(mask, 'maskInvert', 'Invert mask');
     }
-    range(grid, 'densityGamma', 'Tone curve', 0.2, 4);
-    if (!dotGrid && (layer.densityPattern === 'random' || (layer.type === 'ascii' && layer.mapping === 'random'))) range(grid, 'seed', 'Seed', 0, 9999, 1, value => String(value));
+    const sampling = panels.get('sampling');
+    range(sampling, 'brightness', 'Brightness boost', 0, 4);
+    range(sampling, 'contrast', 'Contrast', 0, 3);
+    range(sampling, 'detail', 'Image detail', 0, 1, .01, percent);
+    range(sampling, 'threshold', 'Minimum brightness', 0, 1, .01, percent);
+    range(sampling, 'ceiling', 'Maximum brightness', 0, 1, .01, percent);
   }
+  glowControls(panels.get('glow'));
+  activate(inspectorTabs.get(layer.id) || 'shape');
+  if (focusKey) inspector.querySelector(`[data-key="${focusKey}"]`)?.focus({ preventScroll: true });
+}
 
-  const tones = group('Sampling');
-  range(tones, 'brightness', 'Brightness boost', 0, 4);
-  range(tones, 'contrast', 'Contrast', 0, 3);
-  if (layer.type === 'ascii' && layer.symbolMode === 'dots') range(tones, 'dotGamma', 'Gamma', 0.2, 3);
-  else if (layer.type !== 'glow') range(tones, 'detail', 'Image detail', 0, 1, 0.01, percent);
-  range(tones, 'threshold', 'Minimum brightness', 0, 1, 0.01, percent);
-  range(tones, 'ceiling', 'Maximum brightness', 0, 1, 0.01, percent);
-  const mask = group('Mask');
-  select(mask, 'maskMode', 'Region', [['none', 'All'], ['linear', 'Linear'], ['radial', 'Radial']], true);
-  if (layer.maskMode !== 'none') {
-    if (layer.maskMode === 'linear') {
-      range(mask, 'maskAngle', 'Angle', -180, 180, 1, value => `${value}°`);
-      range(mask, 'maskPosition', 'Position', 0, 1, 0.01, percent);
-    } else {
-      range(mask, 'maskX', 'Center X', 0, 1, 0.01, percent);
-      range(mask, 'maskY', 'Center Y', 0, 1, 0.01, percent);
-      range(mask, 'maskRadius', 'Mask radius', 0.05, 1.5, 0.01, percent);
-    }
-    range(mask, 'maskFeather', 'Feather', 0, 1, 0.01, percent);
-    if (layer.type !== 'glow') select(mask, 'maskEdges', 'Edges', [['fade', 'Fade'], ['scatter', 'Scatter']]);
-    const invert = controlElement('label', { class: 'inline-control' }, 'Invert mask');
-    const checkbox = controlElement('input', { type: 'checkbox', 'aria-label': 'Invert mask' });
-    checkbox.checked = layer.maskInvert;
-    checkbox.addEventListener('change', () => { layer.maskInvert = checkbox.checked; scheduleRender(); });
-    invert.append(checkbox); mask.append(invert);
-  }
-  glowControls();
-  const transform = group('Transform');
-  range(transform, 'scale', 'Scale', 0.25, 3);
-  const offsetLimit = Math.min(4096, Math.max(renderer?.referenceWidth || 1024, renderer?.referenceHeight || 1024));
-  range(transform, 'offsetX', 'Offset X', -offsetLimit, offsetLimit, 1, px);
-  range(transform, 'offsetY', 'Offset Y', -offsetLimit, offsetLimit, 1, px);
-  const reset = controlElement('button', { class: 'reset-transform' }, 'Reset transform');
-  reset.addEventListener('click', () => { layer.scale = 1; layer.offsetX = layer.offsetY = 0; renderInspector(); scheduleRender(); });
-  transform.append(reset);
+function renderReference() {
+  const thumbnail = $('#reference-thumbnail'), source = renderer?.sourceCanvas;
+  const context = thumbnail.getContext('2d');
+  context.clearRect(0, 0, thumbnail.width, thumbnail.height);
+  if (!source) return;
+  const scale = Math.min(thumbnail.width / source.width, thumbnail.height / source.height);
+  const width = source.width * scale, height = source.height * scale;
+  context.drawImage(source, (thumbnail.width - width) / 2, (thumbnail.height - height) / 2, width, height);
 }
 
 function moveLayer(layer, direction) {
@@ -371,6 +402,7 @@ async function importImage(file) {
     await image.decode();
     if (generation !== importGeneration) return;
     renderer.setSource(image);
+    renderReference();
     selectionEditor.stop();
     for (const layer of project.layers) { layer.selectionActive = false; layer.selectionBits = ''; }
     imageName = file.name.replace(/\.[^.]+$/, '') || 'Image';
@@ -435,10 +467,10 @@ try {
   const generation = importGeneration;
   loadPeonySource().then(source => {
     if (generation !== importGeneration) return;
-    renderer.setSource(source); renderInspector(); scheduleRender();
+    renderer.setSource(source); renderReference(); renderInspector(); scheduleRender();
   }).catch(() => {
     if (generation !== importGeneration) return;
-    renderer.setSource(makeSample()); renderInspector(); scheduleRender();
+    renderer.setSource(makeSample()); renderReference(); renderInspector(); scheduleRender();
   });
 } catch (error) {
   message(error.message);
