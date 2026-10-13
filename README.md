@@ -2,6 +2,8 @@
 
 A browser-local image renderer with independent ASCII, pixel, and glow layers. Vanilla JavaScript, WebGL 2, no runtime dependencies, no image uploads, and no build step. The current interface is a control surface for developing the engine; visual frontend design remains open.
 
+[Open the live workspace](https://ascii-effects-studio.ronniegoo.chatgpt.site). The deployment is private and starts with the Dots preset.
+
 ## Run
 
 Requires Node.js 20 or newer for the local server and command-line tests.
