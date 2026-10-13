@@ -172,7 +172,7 @@ function renderInspector() {
   if (layer.type === 'pixel') {
     select(inspector, 'pixelShape', 'Shape', [['dot', 'Dot'], ['square', 'Square'], ['box', 'Hollow square']], true);
     const grid = group('Grid');
-    range(grid, 'cellSize', 'Spacing', 6, 32, 1, px);
+    range(grid, 'cellSize', 'Spacing', layer.pixelShape === 'dot' ? 6 : 2, 100, .01, px);
     if (layer.pixelShape === 'dot') range(grid, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
     else range(grid, 'size', 'Pixel size', .1, 1, .01, percent);
     if (layer.pixelShape === 'box') range(grid, 'stroke', 'Stroke width', .02, .4, .01, percent);
