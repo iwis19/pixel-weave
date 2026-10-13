@@ -21,6 +21,11 @@ button[aria-pressed="true"] { color: var(--text); background: var(--selected); b
 .rename-input { min-width: 0; flex: 1; width: 100%; color: var(--text); background: var(--control); border: 1px solid var(--border-hover); border-radius: 4px; padding: 7px 5px; }
 .workspace-identity > .rename-input { width: 180px; max-width: 250px; }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.save-actions { position: relative; display: flex; }
+.save-actions > #save-project { border-radius: 6px 0 0 6px; }
+.save-actions > #save-options { border-radius: 0 6px 6px 0; border-left: 0; padding: 7px 8px; }
+.project-save-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 6; min-width: 180px; padding: 5px; border: 1px solid var(--border-hover); border-radius: 7px; background: var(--panel); box-shadow: 0 8px 30px #0008; }
+.project-save-menu button { display: block; width: 100%; text-align: left; padding: 9px 10px; border: 0; background: transparent; }
 .toolbar .primary { background: #ededed; color: #0a0a0a; border-color: #ededed; font-weight: 550; }
 .toolbar .primary:hover { background: #d6d6d6; }
 main { --left-panel-default: 232px; --right-panel-default: 308px; position: relative; display: grid; grid-template-columns: var(--left-panel-width, var(--left-panel-default)) minmax(0, 1fr) var(--right-panel-width, var(--right-panel-default)); height: calc(100dvh - 62px); }
@@ -120,6 +125,27 @@ input[type="checkbox"] { accent-color: var(--text); width: 16px; height: 16px; c
 .picker-chevron { margin-left: auto; color: var(--muted); }
 .shape-picker { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--border-hover); border-radius: 12px; color: var(--text); background: var(--panel); box-shadow: 0 20px 80px #0009; overflow-y: auto; }
 .shape-picker::backdrop { background: #0009; backdrop-filter: blur(3px); }
+.project-gallery { width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 22px; border: 1px solid var(--border-hover); border-radius: 12px; color: var(--text); background: var(--panel); box-shadow: 0 20px 80px #0009; overflow-y: auto; }
+.project-gallery::backdrop { background: #0009; backdrop-filter: blur(3px); }
+.project-gallery .picker-header > button { font-size: 20px; padding: 2px 8px; color: var(--muted); background: transparent; border-color: transparent; }
+.project-search { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--control); color: var(--text); }
+.project-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.project-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.project-card:focus-within, .project-card:hover { border-color: var(--border-hover); }
+.open-saved-project { display: flex; flex-direction: column; width: 100%; text-align: left; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.open-saved-project img, .project-preview-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 3 / 2; object-fit: contain; background: #050505; }
+.project-preview-placeholder { color: var(--muted); font-size: 30px; }
+.saved-project-name { display: block; width: 100%; padding: 11px 12px 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 550; }
+.project-card-details { display: flex; align-items: center; gap: 3px; padding: 2px 8px 8px 12px; }
+.project-date { min-width: 0; flex: 1; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-card-details button { display: flex; padding: 5px; background: transparent; border-color: transparent; color: var(--muted); }
+.project-card-details .ui-icon { width: 13px; height: 13px; }
+.project-card > .rename-input { width: calc(100% - 16px); margin: 8px; }
+.gallery-status { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; min-height: 28px; margin-top: 12px; color: var(--muted); }
+.gallery-status .confirm-delete-project { color: #fdafaf; }
+.gallery-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); margin-top: 12px; padding-top: 16px; }
+.gallery-footer > span { color: var(--muted); font-size: 11px; }
+@media (max-width: 520px) { .project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .project-gallery { padding: 16px; } .project-date { font-size: 9px; } }
 .picker-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .picker-header h2 { font-size: 16px; font-weight: 550; margin: 0; }
 .picker-close { font-size: 20px; padding: 2px 8px; background: transparent; border-color: transparent; color: var(--muted); }
@@ -193,6 +219,7 @@ input[type="checkbox"] { accent-color: var(--text); width: 16px; height: 16px; c
   .workspace-identity { width: 100%; }
   .toolbar-actions { width: 100%; gap: 5px; }
   .toolbar-actions button { font-size: 11px; padding: 7px 8px; }
+  .save-actions > #save-options { padding: 7px 6px; }
   #preset { flex: 1; width: 0; }
   main { display: flex; flex-direction: column; height: auto; }
   .panel-resize { display: none; }
