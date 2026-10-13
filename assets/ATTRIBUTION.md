@@ -11,3 +11,11 @@
 `reference-target.png` is the effect reference supplied by the user. It is used only for comparison, never as the renderer input.
 
 `dot-tool-reference.png` is a PNG exported from the user-linked [pixel-to-character](https://pixel-to-character.vercel.app/) tool, by Matthew Hamilton, using `peony-source.webp` with the tool's default Dots settings. It appears only in the dot comparison page, never as an engine input. The tool's public source is https://github.com/matthewhamilton3141/pixel-to-character.
+
+# Interface fonts
+
+Geist Sans and Geist Mono, copyright 2023 Vercel in collaboration with basement.studio. The unmodified variable WOFF2 files are bundled from the official `geist` npm package, version 1.7.2. They are used for interface typography; the rendering engine's character font remains unchanged.
+
+- Typeface: https://vercel.com/font
+- Package: https://www.npmjs.com/package/geist
+- SIL Open Font License 1.1: `fonts/LICENSE.txt`

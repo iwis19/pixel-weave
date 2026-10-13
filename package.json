@@ -8,6 +8,6 @@
     "start": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "test": "node --test tests/model.test.mjs",
-    "check": "node --check src/engine.js && node --check src/shaders.js && node --check src/model.js && node --check src/app.js && node --check src/panel-resize.js && node --check src/presets.js && node --check src/dot-glyphs.js && node --check src/selection.js && node --check src/selection-editor.js && node --check src/point-grid.js && node --check examples/peony.js && node --check examples/dots.js && node --check examples/source-preparation.js"
+    "check": "node --check src/engine.js && node --check src/shaders.js && node --check src/model.js && node --check src/app.js && node --check src/panel-resize.js && node --check src/ui-icons.js && node --check src/presets.js && node --check src/dot-glyphs.js && node --check src/selection.js && node --check src/selection-editor.js && node --check src/point-grid.js && node --check examples/peony.js && node --check examples/dots.js && node --check examples/source-preparation.js"
   }
 }

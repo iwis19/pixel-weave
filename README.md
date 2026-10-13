@@ -78,7 +78,9 @@ The engine stores colors with premultiplied alpha internally. Blend modes are no
 - Image files are limited to 50 MB; settings files to 1 MB. Animated inputs use a still frame.
 - WebGL 2 is required. Context loss pauses rendering, with automatic resource restoration when the browser restores the context.
 
-No server rendering, external fonts, frameworks, analytics, or cloud services are involved.
+The interface uses a Vercel-inspired dark palette with Geist Sans, Geist Mono for values, neutral borders, and monochrome controls. Both variable fonts are served locally (about 138 KiB together); no external font requests or runtime UI framework are involved. Typeface credits and the included license are in `assets/ATTRIBUTION.md` and `assets/fonts/LICENSE.txt`.
+
+No server rendering, analytics, or cloud services are involved.
 
 ## First visual benchmark
 

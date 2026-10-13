@@ -4,6 +4,7 @@ import { makeSample } from './sample.js';
 import { peonyProject, dotsProject, loadPeonySource } from './presets.js';
 import { SelectionEditor } from './selection-editor.js';
 import { initPanelResize } from './panel-resize.js';
+import { uiIcon } from './ui-icons.js';
 
 const $ = selector => document.querySelector(selector);
 const canvas = $('#preview');
@@ -188,7 +189,8 @@ function renderInspector() {
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
   name.addEventListener('input', () => { layer.name = name.value; renderLayers(); });
   identity.append(name);
-  const duplicate = controlElement('button', { title: 'Duplicate layer', 'aria-label': 'Duplicate layer' }, '⧉');
+  const duplicate = controlElement('button', { title: 'Duplicate layer', 'aria-label': 'Duplicate layer' });
+  duplicate.append(uiIcon('copy'));
   duplicate.addEventListener('click', () => {
     if (project.layers.length >= MAX_LAYERS) return message(`Use up to ${MAX_LAYERS} layers`);
     const copy = createLayer(layer.type, { ...layer, id: crypto.randomUUID(), name: `${layer.name} copy` });
@@ -196,7 +198,8 @@ function renderInspector() {
     inspectorTabs.set(copy.id, inspectorTabs.get(layer.id) || 'shape');
     selectedId = copy.id; renderUI(); scheduleRender();
   });
-  const remove = controlElement('button', { title: 'Delete layer', 'aria-label': 'Delete layer', class: 'delete-layer' }, '×');
+  const remove = controlElement('button', { title: 'Delete layer', 'aria-label': 'Delete layer', class: 'delete-layer' });
+  remove.append(uiIcon('trash'));
   remove.addEventListener('click', () => {
     const index = project.layers.indexOf(layer);
     project.layers.splice(index, 1); inspectorTabs.delete(layer.id);
@@ -347,13 +350,15 @@ function renderLayers() {
   const glyphs = { ascii: 'Aa', pixel: '▦' };
   for (const layer of [...project.layers].reverse()) {
     const row = controlElement('div', { class: `layer-row${layer.id === selectedId ? ' selected' : ''}` });
-    const toggle = controlElement('button', { class: 'layer-toggle', 'aria-pressed': layer.enabled, 'aria-label': `Toggle ${layer.name}`, title: layer.enabled ? 'Hide layer' : 'Show layer' }, layer.enabled ? '◉' : '○');
+    const toggle = controlElement('button', { class: 'layer-toggle', 'aria-pressed': layer.enabled, 'aria-label': `Toggle ${layer.name}`, title: layer.enabled ? 'Hide layer' : 'Show layer' });
+    toggle.append(uiIcon(layer.enabled ? 'eye' : 'eyeOff'));
     toggle.addEventListener('click', () => { layer.enabled = !layer.enabled; renderLayers(); scheduleRender(); });
     const pick = controlElement('button', { class: 'layer-pick', 'aria-pressed': layer.id === selectedId });
     pick.append(controlElement('span', { class: 'layer-type' }, glyphs[layer.type]), controlElement('span', { class: 'layer-title' }, layer.name || layer.type));
     pick.addEventListener('click', () => { selectedId = layer.id; renderUI(); });
-    const up = controlElement('button', { class: 'move-layer', 'aria-label': `Move ${layer.name} up`, title: 'Move up' }, '↑');
-    const down = controlElement('button', { class: 'move-layer', 'aria-label': `Move ${layer.name} down`, title: 'Move down' }, '↓');
+    const up = controlElement('button', { class: 'move-layer', 'aria-label': `Move ${layer.name} up`, title: 'Move up' });
+    const down = controlElement('button', { class: 'move-layer', 'aria-label': `Move ${layer.name} down`, title: 'Move down' });
+    up.append(uiIcon('arrowUp')); down.append(uiIcon('arrowDown'));
     up.disabled = project.layers.indexOf(layer) === project.layers.length - 1;
     down.disabled = project.layers.indexOf(layer) === 0;
     up.addEventListener('click', () => moveLayer(layer, 1)); down.addEventListener('click', () => moveLayer(layer, -1));
