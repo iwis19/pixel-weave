@@ -3,10 +3,12 @@ import { createLayer, defaultProject, normalizeProject, MAX_LAYERS, SHAPES } fro
 import { makeSample } from './sample.js';
 import { peonyProject, dotsProject, loadPeonySource } from './presets.js';
 import { SelectionEditor } from './selection-editor.js';
+import { initPanelResize } from './panel-resize.js';
 
 const $ = selector => document.querySelector(selector);
 const canvas = $('#preview');
 const inspector = $('#inspector');
+const panelResize = initPanelResize(document.querySelector('main'));
 const startWithDots = new URLSearchParams(location.search).get('preset') !== 'peony';
 let project = startWithDots ? dotsProject() : peonyProject();
 let presetFingerprint = JSON.stringify(project);
@@ -477,5 +479,5 @@ try {
   $('#export-image').disabled = true;
   $('#open-image').disabled = true;
 }
-window.addEventListener('pagehide', event => { if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; } if (!event.persisted) { previewObserver.disconnect(); renderer?.dispose(); } });
-window.addEventListener('pageshow', event => { if (event.persisted) scheduleRender(); });
+window.addEventListener('pagehide', event => { if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; } if (!event.persisted) { panelResize.dispose(); previewObserver.disconnect(); renderer?.dispose(); } });
+window.addEventListener('pageshow', event => { if (event.persisted) { panelResize.refresh(); scheduleRender(); } });

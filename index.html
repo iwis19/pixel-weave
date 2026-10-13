@@ -19,7 +19,7 @@
       </div>
     </header>
     <main>
-      <aside class="library-panel" aria-label="Image and layers">
+      <aside class="library-panel" id="library-panel" aria-label="Image and layers">
         <section class="reference-section">
           <div class="section-header"><span class="section-label">Reference</span><button id="open-image">Open image</button></div>
           <canvas id="reference-thumbnail" width="240" height="144" role="img" aria-label="Reference image"></canvas>
@@ -47,9 +47,11 @@
         </div>
         <div id="drop-overlay">Drop image</div>
       </section>
-      <aside class="inspector-panel" aria-label="Layer inspector">
+      <aside class="inspector-panel" id="inspector-panel" aria-label="Layer inspector">
         <section id="inspector" class="inspector" aria-label="Selected layer controls"></section>
       </aside>
+      <div class="panel-resize panel-resize-left" data-panel-resize="left" role="separator" tabindex="0" aria-label="Resize left panel" aria-orientation="vertical" aria-controls="library-panel" title="Drag to resize. Double-click or press Enter to reset."></div>
+      <div class="panel-resize panel-resize-right" data-panel-resize="right" role="separator" tabindex="0" aria-label="Resize right panel" aria-orientation="vertical" aria-controls="inspector-panel" title="Drag to resize. Double-click or press Enter to reset."></div>
     </main>
     <div id="message" role="status" hidden></div>
     <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp" hidden />
