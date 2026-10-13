@@ -23,7 +23,7 @@ button[aria-pressed="true"] { color: var(--text); background: var(--selected); b
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .save-actions { position: relative; display: flex; }
 .save-actions > #save-project { border-radius: 6px 0 0 6px; }
-.save-actions > #save-options { border-radius: 0 6px 6px 0; border-left: 0; padding: 7px 8px; }
+.save-actions > #save-options { display: flex; align-items: center; justify-content: center; border-radius: 0 6px 6px 0; border-left: 0; padding: 7px 8px; }
 .project-save-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 6; min-width: 180px; padding: 5px; border: 1px solid var(--border-hover); border-radius: 7px; background: var(--panel); box-shadow: 0 8px 30px #0008; }
 .project-save-menu button { display: block; width: 100%; text-align: left; padding: 9px 10px; border: 0; background: transparent; }
 .toolbar .primary { background: #ededed; color: #0a0a0a; border-color: #ededed; font-weight: 550; }
