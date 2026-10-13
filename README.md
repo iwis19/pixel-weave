@@ -1,8 +1,8 @@
 # ASCII Effects — phase 1
 
-A browser-local image renderer with independent ASCII, pixel, and glow layers. Vanilla JavaScript, WebGL 2, no runtime dependencies, no image uploads, and no build step. The current interface is a control surface for developing the engine; visual frontend design remains open.
+A browser-local image renderer with ASCII and Pixel layers, each with its own glow controls. Vanilla JavaScript, WebGL 2, no runtime dependencies, no image uploads, and no build step. The current interface is a control surface for developing the engine; visual frontend design remains open.
 
-[Open the live workspace](https://ascii-effects-studio.ronniegoo.chatgpt.site). The deployment is private and starts with the Dots preset.
+[Open the live workspace](https://ascii-effects-studio.ronniegoo.chatgpt.site). The deployment is private and starts with the Pixel preset using the Dot shape.
 
 ## Run
 
@@ -16,20 +16,19 @@ Open http://127.0.0.1:5173. `npm install` is unnecessary. The server binds to lo
 
 ## Use
 
-- Open or drop an image. A prepared peony photo is available immediately with the Dots preset. Red / lilac applies the layered flower recipe to your current image; its cell sizes adapt to the reference width. Neutral restores the initial basic stack. Edits change the selector to Custom.
-- Add ASCII, Pixel, and Glow layers. The list displays topmost layers first. Use the arrows to reorder, the circle to hide, and the inspector to duplicate or delete.
-- An ASCII layer explicitly selects Characters, Shapes, or Dots. No mixed symbol collection is added automatically. Empty character/shape selections draw nothing. Characters are ordered from low to high brightness; random distribution and reverse order are available. Unicode characters render through the browser's monospace font and fallback fonts. Geometric shapes render analytically on the GPU, with editable stroke width for hollow squares, crosses, and diamonds. Older grouped-dot settings remain supported as Dot glyphs.
-- Dots places one circular dot per grid position. Spacing and Dot diameter are independent reference-pixel controls. Coverage retains an exact fraction of eligible positions; Clumping gathers those positions into patches without moving them off the grid. There is no minimum-brightness cutoff, mode switch, or Shuffle control in this inspector. The default preset keeps the underlying Image visible at 55%.
+- Open or drop an image. A prepared peony photo is available immediately with the Pixel preset. Red / lilac applies the layered flower recipe to your current image; its cell sizes adapt to the reference width. Neutral restores the initial basic stack. Edits change the selector to Custom.
+- Add ASCII or Pixel layers. The list displays topmost layers first. Use the arrows to reorder, the circle to hide, and the inspector to duplicate or delete. Glow is an on/off option inside either layer; it has no separate layer entry.
+- An ASCII layer explicitly selects Characters or Shapes. Empty character/shape selections draw nothing. Characters are ordered from low to high brightness; random distribution and reverse order are available. Unicode characters render through the browser's monospace font and fallback fonts. Geometric symbols render analytically on the GPU, with editable stroke width for hollow squares, crosses, and diamonds.
+- Pixel layers offer Dot, Square, or Hollow square in one inspector. Dot places one circle per grid position. Spacing and Dot diameter are independent reference-pixel controls. Dot coverage retains an exact fraction of eligible positions; Clumping gathers those positions into patches without moving them off the grid. There is no minimum-brightness cutoff, mode switch, or Shuffle control in the Pixel inspector. The default preset keeps the underlying Image visible at 55%.
 - Turn Draw selection on, then hold left-click and drag on the image or distribution map. The highlight sets the area for that layer; brush size controls the stroke width. Erase trims it, turning drawing off keeps it, and Clear returns to the full reference image. Spacing, diameter, coverage, and clumping remain active during drawing. Painted selections may include dark or transparent areas; Solid color makes dots visible there. Each layer saves its own compact mask, and importing a new image clears the previous selections.
-- Pixel layers offer squares, dots, or hollow squares.
-- Glow layers use soft bloom or a square box treatment. Target the original image, an ASCII/pixel layer beneath the glow, or the visible composition beneath it. A targeted layer supplies its drawing before opacity/blending, which also allows glow-only compositions. Hiding a target hides its glow. Target dependencies are kept beneath glow layers when reordering.
-- Every layer has its own color, opacity, blend, scale, and X/Y offset. Character, pixel, and glow layers also retain their sampling controls. Cell size and offsets use processed reference-image pixels. Scale transforms the layer around the image center; positive offsets move right/down. Drawing grids scale with the layer and remain consistent when preview resolution changes. Painted selections stay aligned with the canvas while layer transforms move the dots through them.
+- Enable Glow on an ASCII or Pixel layer for soft bloom or a square box treatment, with independent Strength and Radius. The halo follows that layer's color, transform, and painted region; hiding or fading the layer also hides or fades its glow. Reordering moves the effect and its glow together.
+- Every layer has its own color, opacity, blend, scale, X/Y offset, and glow settings. Cell size and offsets use processed reference-image pixels. Scale transforms the layer around the image center; positive offsets move right/down. Drawing grids scale with the layer and remain consistent when preview resolution changes. Painted selections stay aligned with the canvas while layer transforms move marks through them.
 - Colors can come from the image, a shaded tint, a solid color, or a two-color spatial gradient. Solid and gradient colors have adjustable image shading. Image tint affects the underlying photo only; Original bypasses it.
 - Linear and radial masks restrict individual layers to a region. They support angle/position or center/radius, feather, inversion, and faded or scattered edges. Masks follow each layer's transform. Glow masks control the emission region before blur.
 - Density by tone and Tone curve make marks concentrate in brighter areas, preserving detail in darker petals or other subjects. Cell size supports fractional values; stroke width is a fraction of the cell.
 - Ordered spacing uses Bayer coverage to vary density within a regular grid. Random spacing uses the layer's seed. Size by tone varies mark size with brightness. Image detail preserves continuous source texture inside coarse cells; combine it with Image shading for colored cells that retain petal folds.
 - Glow radius is also measured in reference-image pixels. Box glow first samples a cell grid and then applies a separable square blur. Soft glow applies a Gaussian-weighted blur.
-- Save/Load stores layer settings and painted selections as JSON. Reopen the reference image separately; image data is deliberately excluded from the settings file.
+- Save/Load stores layer settings, glow, and painted selections as JSON. Older dot layers load as Pixel layers; older standalone glows are folded into their drawing layers. Reopen the reference image separately; image data is deliberately excluded from the settings file.
 - Export PNG renders the full composition up to a 2048 px long edge. Small images retain their original resolution. Original toggles the preview comparison; export always includes the effects.
 
 ## Engine API
@@ -43,14 +42,13 @@ import { createLayer, normalizeProject } from './src/model.js';
 const renderer = new Renderer(canvas);
 renderer.setSource(image); // HTMLImageElement, ImageBitmap, or canvas
 
-const ascii = createLayer('ascii', { characters: '01', cellSize: 10 });
+const ascii = createLayer('ascii', { characters: '01', cellSize: 10, glowEnabled: true, glowStyle: 'soft' });
 const pixels = createLayer('pixel', { cellSize: 24, opacity: 0.3 });
-const glow = createLayer('glow', { glowSource: ascii.id, glowStyle: 'soft' });
 const project = normalizeProject({
   version: 1,
   background: '#08090b',
   sourceOpacity: 0.15,
-  layers: [pixels, ascii, glow], // bottom to top
+  layers: [pixels, ascii], // bottom to top; glow belongs to ascii
 });
 
 renderer.render(project, { maxEdge: 1280 });
@@ -58,7 +56,7 @@ const png = await renderer.exportPNG(project, 2048);
 renderer.dispose();
 ```
 
-Call `render` after changes; the engine has no animation loop. The UI coalesces input changes with one `requestAnimationFrame`. `render` returns output dimensions, draw-call count, estimated texture allocation, and CPU submission time (not GPU frame time). Use `createLayer`/`normalizeProject` for bounded settings; invalid glow targets fall back to the image during project loading.
+Call `render` after changes; the engine has no animation loop. The UI coalesces input changes with one `requestAnimationFrame`. `render` returns output dimensions, draw-call count, estimated texture allocation, and CPU submission time (not GPU frame time). Use `createLayer`/`normalizeProject` for bounded settings and migration of older dot/glow projects.
 
 For geometry inspection, `render(project, { renderScale: 2, maxEdge: 2048, pixelBudget: 16_000_000 })` re-renders procedural shapes at twice the reference resolution. Cell counts and transforms stay tied to the original image, and the source photo texture keeps its original resolution. The same fixed working-pixel budget still applies. Normal preview and PNG export retain their existing resolution behavior.
 
@@ -70,7 +68,7 @@ The engine stores colors with premultiplied alpha internally. Blend modes are no
 - Preview has an 8-million working-pixel budget for the five main render surfaces. Higher requested resolutions can be reduced automatically, and the actual dimensions appear beside the preview.
 - Export temporarily allows 16 million working pixels so 2048 × 2048 output fits. Preview allocation is restored afterward.
 - Five framebuffer surfaces are reused for the whole stack: two composition targets, one drawing target, and two half-resolution glow targets. Layer count does not allocate additional full-size textures.
-- A selected glow target is redrawn into the shared scratch surface rather than retained in a separate full-size layer cache. Small text glyph atlases are cached per ASCII layer and rebuilt only when symbols change. Geometric symbol layers need no atlas.
+- Layer glow reuses that layer's drawing in the shared scratch surface. Small text glyph atlases are cached per ASCII layer and rebuilt only when symbols change. Geometric symbol layers need no atlas.
 - Grouped dots share one small analysis surface across all dot layers, capped at 512 × 512 character cells (two RGBA8 texels per cell, at most 2 MiB). The cap is applied in reference coordinates so preview and export preserve the same glyph populations. A small mask/shape table is cached per layer, at most 44 KB. Tone/edge analysis runs once per character cell; the full-size drawing pass only reads the selected mask and draws analytic circles. It does not run a glyph search per output pixel.
 - Single dots use a cached one-byte occupancy map per layer, capped below 512 × 512 positions. Only source, distribution, transform, or mask changes rebuild it; diameter, opacity, and color changes reuse it. Painting uses a 160 × 128 bitmap (2.5 KiB before base64), with no per-layer full-size render surfaces. A source thumbnail is sampled once on import. Coverage is ranked on the small grid; the GPU draws crisp analytic circles.
 - Up to 12 layers and 64 characters per layer. Blur uses two fixed 17-tap passes; radius does not increase shader-loop cost.
@@ -85,7 +83,7 @@ Open http://127.0.0.1:5173/examples/peony.html to compare the prepared source, t
 
 The recipe is ordinary layer state in `src/presets.js`: textured red cells and lilac cells with wide faded masks, a single-dot field, and targeted dot glow. Colored coarse cells use continuous image detail. All controls remain live and editable. The flower palette is still an exploratory recipe; it is not a claim of a finished match to the target. No image-specific path is added to the shaders.
 
-Open http://127.0.0.1:5173/examples/dots.html for the dot comparison: source photo, the static reference from the user-linked [pixel-to-character tool](https://pixel-to-character.vercel.app/), and the current single-dot preset. This preset contains one ASCII layer with a lilac dot color and the Image at 55%. The comparison's reference PNG is never used as an engine input. The legacy grouped mode implements the linked tool's tone/edge approach independently; the current inspector uses separate dot geometry and distribution controls.
+Open http://127.0.0.1:5173/examples/dots.html for the dot comparison: source photo, the static reference from the user-linked [pixel-to-character tool](https://pixel-to-character.vercel.app/), and the current Pixel preset. This preset contains one Pixel layer using the Dot shape, with a lilac color and the Image at 55%. The comparison's reference PNG is never used as an engine input. The legacy grouped renderer remains available internally for compatibility; the inspector uses Pixel shapes and their distribution controls.
 
 Export detail re-renders the same recipe at twice the resolution, crops a petal region, and displays it at 480 × 480. It checks the actual circle geometry without magnifying the low-resolution raster alone. It adds no source photograph detail and restores the normal preview surfaces immediately afterward. The dot antialiasing uses continuous coordinates, avoiding derivative jumps at grid boundaries that previously broke fine marks into corner fragments.
 

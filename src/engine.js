@@ -2,6 +2,7 @@ import * as shaders from './shaders.js';
 import { BLENDS, MAX_LAYERS, SHAPES, fitDimensions, hexRGB, symbolsFor } from './model.js';
 import { buildDotGlyphs } from './dot-glyphs.js';
 import { buildPointGrid } from './point-grid.js';
+import { decodeSelection, MASK_WIDTH, MASK_HEIGHT } from './selection.js';
 
 const GLYPH_SIZE = 32;
 const SOURCE_EDGE = 2048;
@@ -20,6 +21,7 @@ export class Renderer {
     this.atlases = new Map();
     this.dotAtlases = new Map();
     this.pointMaps = new Map();
+    this.paintMasks = new Map();
     this.sourceRevision = 0;
     this.dotMap = null;
     this.targets = [];
@@ -33,6 +35,7 @@ export class Renderer {
       this.atlases.clear();
       this.dotAtlases.clear();
       this.pointMaps.clear();
+      this.paintMasks.clear();
       this.dotMap = null;
       this.initialize();
       if (this.sourceCanvas) this.uploadSource();
@@ -275,6 +278,19 @@ export class Renderer {
     return this.layerTarget.texture;
   }
 
+  paintMaskFor(layer) {
+    if (!layer.selectionActive) return this.empty;
+    let mask = this.paintMasks.get(layer.id);
+    if (mask?.key === layer.selectionBits) return mask.texture;
+    const texture = mask?.texture || this.makeTexture();
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, texture); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, MASK_WIDTH, MASK_HEIGHT, 0, gl.RED, gl.UNSIGNED_BYTE, decodeSelection(layer.selectionBits).map(value => value * 255));
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    this.paintMasks.set(layer.id, { texture, key: layer.selectionBits });
+    return texture;
+  }
+
   pass(name, target, values = {}, textures = {}) {
     const gl = this.gl;
     const { program, uniforms } = this.programs[name];
@@ -318,11 +334,13 @@ export class Renderer {
       uMaskMode: ['none', 'linear', 'radial'].indexOf(layer.maskMode), uMaskAngle: layer.maskAngle * Math.PI / 180,
       uMaskPosition: layer.maskPosition, uMaskFeather: layer.maskFeather, uMaskCenter: [layer.maskX, layer.maskY],
       uMaskRadius: layer.maskRadius, uMaskInvert: layer.maskInvert ? 1 : 0,
+      uSelectionActive: layer.selectionActive ? 1 : 0,
+      uClumping: layer.type === 'pixel' ? layer.clumping : 0,
     };
   }
 
   drawLayer(layer) {
-    if (layer.type === 'ascii' && layer.symbolMode === 'points') return this.drawPoints(layer);
+    if ((layer.type === 'pixel' && layer.pixelShape === 'dot') || (layer.type === 'ascii' && layer.symbolMode === 'points')) return this.drawPoints(layer);
     if (layer.type === 'ascii' && layer.symbolMode === 'dots') return this.drawDots(layer);
     const shapes = layer.type === 'ascii' && layer.symbolMode === 'shapes';
     const symbols = shapes ? symbolsFor(layer) : [];
@@ -333,7 +351,7 @@ export class Renderer {
       uSymbolCount: atlas.count, uMapping: layer.mapping === 'random' ? 1 : 0, uInvert: layer.invert ? 1 : 0,
       uShapes: shapes ? 1 : 0, 'uShapeIds[0]': Array.from({ length: 6 }, (_, index) => SHAPES.indexOf(symbols[index] || 'dot')),
       uStroke: layer.stroke, uMaskScatter: layer.maskEdges === 'scatter' ? 1 : 0,
-    }, { uSource: this.source, uAtlas: atlas.texture });
+    }, { uSource: this.source, uAtlas: atlas.texture, uPaintMask: this.paintMaskFor(layer) });
     return this.layerTarget.texture;
   }
 
@@ -344,6 +362,11 @@ export class Renderer {
     this.pass('blur', this.bloom[1], { ...values, uDirection: [1 / this.width, 0] }, { uInput: this.bloom[0].texture });
     this.pass('blur', this.bloom[0], { ...values, uDirection: [0, 1 / this.height] }, { uInput: this.bloom[1].texture });
     return this.bloom[0].texture;
+  }
+
+  drawAttachedGlow(layer, source) {
+    // The parent texture already contains its transform, color and painted region.
+    return this.drawGlow({ ...layer, scale: 1, offsetX: 0, offsetY: 0, selectionActive: false, maskMode: 'none', maskInvert: false, threshold: 0, ceiling: 1, brightness: 1, contrast: 1, colorMode: 'source' }, source);
   }
 
   render(project, { maxEdge = 1280, original = false, pixelBudget = MAX_WORKING_PIXELS, renderScale = 1 } = {}) {
@@ -362,7 +385,10 @@ export class Renderer {
     const layers = project.layers.slice(0, MAX_LAYERS);
     const activeIds = new Set(layers.map(layer => layer.id));
     for (const [id, map] of this.pointMaps) {
-      if (!layers.some(layer => layer.id === id && layer.symbolMode === 'points')) { this.gl.deleteTexture(map.texture); this.pointMaps.delete(id); }
+      if (!layers.some(layer => layer.id === id && ((layer.type === 'pixel' && layer.pixelShape === 'dot') || layer.symbolMode === 'points'))) { this.gl.deleteTexture(map.texture); this.pointMaps.delete(id); }
+    }
+    for (const [id, mask] of this.paintMasks) {
+      if (!activeIds.has(id) || !layers.some(layer => layer.id === id && layer.selectionActive)) { this.gl.deleteTexture(mask.texture); this.paintMasks.delete(id); }
     }
     for (const [id, atlas] of this.atlases) {
       if (!activeIds.has(id) || !layers.some(layer => layer.id === id && layer.symbolMode === 'text')) { this.gl.deleteTexture(atlas.texture); this.atlases.delete(id); }
@@ -392,10 +418,15 @@ export class Renderer {
           uBlend: BLENDS.indexOf(layer.blend),
         }, { uBase: this.accum[front].texture, uLayer: texture });
         front = 1 - front;
+        if (layer.type !== 'glow' && layer.glowEnabled && layer.strength > 0 && layer.glowOpacity > 0) {
+          const halo = this.drawAttachedGlow(layer, texture);
+          this.pass('composite', this.accum[1 - front], { uOpacity: layer.opacity * layer.glowOpacity, uStrength: layer.strength, uBlend: BLENDS.indexOf(layer.glowBlend) }, { uBase: this.accum[front].texture, uLayer: halo });
+          front = 1 - front;
+        }
       }
     }
     this.pass('copy', null, {}, { uInput: this.accum[front].texture });
-    const dotBytes = (this.dotMap ? this.dotMap.width * this.dotMap.height * 4 : 0) + [...this.dotAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0) + [...this.pointMaps.values()].reduce((sum, map) => sum + map.data.byteLength, 0) + this.sourcePixels.data.byteLength;
+    const dotBytes = (this.dotMap ? this.dotMap.width * this.dotMap.height * 4 : 0) + [...this.dotAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0) + [...this.pointMaps.values()].reduce((sum, map) => sum + map.data.byteLength, 0) + this.sourcePixels.data.byteLength + this.paintMasks.size * MASK_WIDTH * MASK_HEIGHT;
     const stats = { width, height, drawCalls: this.drawCalls, cpuMs: performance.now() - start, limited: budgetScale < 1, surfaceBytes: Math.round(width * height * 3.5 * 4 + this.sourceCanvas.width * this.sourceCanvas.height * 4 + dotBytes) };
     this.stats = stats;
     return stats;
@@ -419,6 +450,8 @@ export class Renderer {
     this.dotAtlases.clear();
     for (const map of this.pointMaps.values()) this.gl.deleteTexture(map.texture);
     this.pointMaps.clear();
+    for (const mask of this.paintMasks.values()) this.gl.deleteTexture(mask.texture);
+    this.paintMasks.clear();
     this.gl.deleteTexture(this.source);
     this.gl.deleteTexture(this.empty);
     for (const { program } of Object.values(this.programs)) this.gl.deleteProgram(program);

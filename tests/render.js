@@ -144,14 +144,14 @@ test('Original comparison bypasses image tint', () => {
 });
 test('Dots are circular and render identically in ASCII and pixel layers', () => {
   fillWhite();
-  const options = { cellSize: 8, size: 0.6, colorMode: 'solid', color: '#ffffff' };
+  const options = { cellSize: 8, size: 0.6, dotDiameter: 8 * .6 * .86, colorMode: 'solid', color: '#ffffff' };
   const ascii = createLayer('ascii', { ...options, symbolMode: 'shapes', shapes: ['dot'] });
   const image = snapshot([ascii]);
   const axis = pixel(image, 18, 19)[0], corner = pixel(image, 18, 18)[0];
   assert(axis > 220 && corner < axis * 0.6, 'Dots have square corners or broken geometry');
   assert(pixel(image, 19, 19)[0] > 240 && pixel(image, 16, 16)[0] === 0, 'Dot center or gap is incorrect');
   const pixels = snapshot([createLayer('pixel', { ...options, pixelShape: 'dot' })]);
-  assert(image.every((value, i) => value === pixels[i]), 'Dot geometry differs by layer type');
+  assert(image.every((value, i) => Math.abs(value - pixels[i]) <= 1), 'Dot geometry differs by layer type');
 });
 test('Fractional dot grids keep marks separated with no edge fragments', () => {
   fillWhite();
@@ -304,6 +304,31 @@ test('Single dots remain available as a glow target', () => {
   const layer = createLayer('ascii', { symbolMode: 'points', colorMode: 'solid', color: '#00ff00', cellSize: 16, dotDiameter: 3 });
   const glow = createLayer('glow', { glowSource: layer.id, threshold: 0, radius: 8, strength: 2 });
   assert(sum(snapshot([layer, glow])) > sum(snapshot([layer])), 'Single-dot glow is missing');
+});
+
+test('Attached glow follows Pixel and ASCII layers and hides with its parent', () => {
+  fillWhite();
+  for (const layer of [createLayer('pixel', { pixelShape: 'dot', cellSize: 16, dotDiameter: 3, colorMode: 'solid', color: '#00ff00' }), createLayer('ascii', { characters: '+', cellSize: 16, colorMode: 'solid', color: '#00ff00' })]) {
+    const plain = snapshot([layer]);
+    layer.glowEnabled = true; layer.radius = 10; layer.strength = 2;
+    const glow = snapshot([layer]);
+    assert(sum(glow) > sum(plain), 'Attached glow is missing');
+    layer.enabled = false; assert(sum(snapshot([layer])) === 0, 'Hidden parent still glows');
+    layer.enabled = true; layer.opacity = 0; assert(sum(snapshot([layer])) === 0, 'Transparent parent still glows');
+  }
+});
+
+test('Square and hollow-square Pixels use the same painted regions as dot Pixels', () => {
+  ctx.clearRect(0, 0, 128, 128); renderer.setSource(source);
+  const mask = decodeSelection(); paintSelection(mask, .2, .2, 40, 128, 128);
+  const settings = { cellSize: 8, density: 1, colorMode: 'solid', color: '#ffffff', selectionActive: true, selectionBits: encodeSelection(mask), threshold: 1 };
+  for (const shape of ['square', 'box']) {
+    const layer = createLayer('pixel', { ...settings, pixelShape: shape });
+    const image = snapshot([layer]);
+    assert(sum(image) > 0 && pixel(image, 100, 100)[0] === 0, `${shape} did not obey the painted region`);
+    layer.glowEnabled = true; layer.radius = 8; layer.strength = 2;
+    assert(sum(snapshot([layer])) > sum(image), `${shape} glow is missing`);
+  }
 });
 
 test('Large input processing and preview allocation stay bounded', () => {

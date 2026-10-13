@@ -18,6 +18,7 @@ const defaults = {
   selectionActive: false, selectionBits: '',
   mapping: 'brightness', invert: false, pixelShape: 'square',
   glowStyle: 'soft', glowSource: 'source', radius: 14, strength: 1.6,
+  glowEnabled: false, glowOpacity: 1, glowBlend: 'add',
   stroke: 0.1, color2: '#d9a2ff', colorAngle: 0, colorShading: 0,
   maskMode: 'none', maskAngle: 45, maskPosition: 0.5, maskFeather: 0.25,
   maskX: 0.5, maskY: 0.5, maskRadius: 0.5, maskInvert: false, maskEdges: 'fade',
@@ -35,9 +36,11 @@ const ranges = {
   toneSize: [0, 1], detail: [0, 1],
   dotRows: [2, 8], dotAspect: [0.4, 1.4], dotEdges: [0, 1], dotGamma: [0.2, 3],
   dotDiameter: [0.25, 5], clumping: [0, 1], brushSize: [10, 500],
+  glowOpacity: [0, 1],
 };
 
 export function symbolsFor(layer) {
+  if (layer.type === 'pixel') return [];
   if (['dots', 'points'].includes(layer.symbolMode)) return [];
   if (layer.symbolMode === 'shapes') return layer.shapes.filter(s => SHAPES.includes(s)).slice(0, MAX_SYMBOLS);
   return [...new Set(Array.from(layer.characters))].slice(0, MAX_SYMBOLS);
@@ -52,7 +55,8 @@ export function createLayer(type = 'ascii', overrides = {}) {
 }
 
 export function normalizeLayer(input) {
-  const type = ['ascii', 'pixel', 'glow'].includes(input.type) ? input.type : 'ascii';
+  const previousDots = input.type === 'ascii' && input.symbolMode === 'points';
+  const type = previousDots ? 'pixel' : ['ascii', 'pixel', 'glow'].includes(input.type) ? input.type : 'ascii';
   const out = { ...defaults, type };
   out.id = typeof input.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(input.id) ? input.id : globalThis.crypto.randomUUID();
   out.name = typeof input.name === 'string' ? input.name.slice(0, 60) : type;
@@ -63,6 +67,7 @@ export function normalizeLayer(input) {
   out.ceiling = Math.max(out.threshold, out.ceiling);
   out.dotRows = Math.round(out.dotRows);
   out.enabled = input.enabled !== false;
+  out.glowEnabled = input.glowEnabled === true;
   out.invert = input.invert === true;
   out.maskInvert = input.maskInvert === true;
   out.selectionActive = input.selectionActive === true;
@@ -70,7 +75,7 @@ export function normalizeLayer(input) {
     try { if (atob(input.selectionBits).length === MASK_BYTES) out.selectionBits = input.selectionBits; } catch { /* Ignore malformed settings. */ }
   }
   for (const [key, values] of Object.entries({
-    blend: BLENDS, symbolMode: ['text', 'shapes', 'dots', 'points'], mapping: ['brightness', 'random'],
+    blend: BLENDS, glowBlend: BLENDS, symbolMode: ['text', 'shapes', 'dots', 'points'], mapping: ['brightness', 'random'],
     colorMode: ['source', 'tint', 'solid', 'gradient'], pixelShape: ['square', 'dot', 'box'], glowStyle: ['soft', 'box'],
     maskMode: ['none', 'linear', 'radial'], maskEdges: ['fade', 'scatter'],
     densityPattern: ['random', 'ordered'],
@@ -80,31 +85,41 @@ export function normalizeLayer(input) {
   out.color = /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : defaults.color;
   out.color2 = /^#[0-9a-f]{6}$/i.test(input.color2) ? input.color2 : defaults.color2;
   out.glowSource = typeof input.glowSource === 'string' && /^(source|below|[a-zA-Z0-9_-]{1,80})$/.test(input.glowSource) ? input.glowSource : 'source';
-  if (out.symbolMode === 'points') out.cellSize = Math.max(6, out.cellSize);
+  if (previousDots) {
+    out.pixelShape = 'dot'; out.symbolMode = 'text';
+    if (['Dots', 'Dot field', 'ASCII'].includes(out.name)) out.name = out.name === 'Dot field' ? 'Pixel field' : 'Pixels';
+  }
+  if (out.type === 'pixel') out.symbolMode = 'text';
+  if (out.type === 'pixel' && out.pixelShape === 'dot') out.cellSize = Math.max(6, out.cellSize);
   return out;
 }
 
 export function defaultProject() {
   const pixels = createLayer('pixel', { name: 'Soft pixels', cellSize: 16, size: 0.94, opacity: 0.32, threshold: 0.12 });
-  const ascii = createLayer('ascii', { name: 'Characters', cellSize: 9, threshold: 0.18, brightness: 1.2 });
-  const glow = createLayer('glow', { name: 'Character glow', glowSource: ascii.id, radius: 12, strength: 1.8, threshold: 0.12 });
-  return { version: 1, background: '#08090b', sourceOpacity: 0.2, sourceTint: '#ffffff', layers: [pixels, ascii, glow] };
+  const ascii = createLayer('ascii', { name: 'Characters', cellSize: 9, threshold: 0.18, brightness: 1.2, glowEnabled: true, radius: 12, strength: 1.8 });
+  return { version: 1, background: '#08090b', sourceOpacity: 0.2, sourceTint: '#ffffff', layers: [pixels, ascii] };
 }
 
 export function normalizeProject(input) {
   if (!input || input.version !== 1 || !Array.isArray(input.layers)) throw new Error('Invalid project file');
   if (input.layers.length > MAX_LAYERS) throw new Error(`Use up to ${MAX_LAYERS} layers`);
   if (input.layers.some(layer => !layer || typeof layer !== 'object' || Array.isArray(layer))) throw new Error('Invalid layer settings');
-  const layers = input.layers.map(normalizeLayer);
+  const normalized = input.layers.map(layer => normalizeLayer(layer.type === 'ascii' && layer.symbolMode === 'dots' ? { ...layer, symbolMode: 'points' } : layer));
   const ids = new Set();
-  for (const layer of layers) {
+  for (const layer of normalized) {
     if (ids.has(layer.id)) throw new Error('Duplicate layer IDs');
     ids.add(layer.id);
   }
-  // Glow dependencies are intentionally acyclic: a layer can only sample layers beneath it.
-  for (let i = 0; i < layers.length; i++) {
-    const layer = layers[i];
-    if (!['source', 'below'].includes(layer.glowSource) && !layers.slice(0, i).some(l => l.id === layer.glowSource && l.type !== 'glow')) layer.glowSource = 'source';
+  const layers = [];
+  for (const layer of normalized) {
+    if (layer.type !== 'glow') { layers.push(layer); continue; }
+    // Migrate older standalone glows onto their drawing layer, keeping masks and IDs intact.
+    const target = layers.find(value => value.id === layer.glowSource) || layers.at(-1);
+    if (target) {
+      target.glowEnabled = layer.enabled;
+      target.glowStyle = layer.glowStyle; target.radius = layer.radius; target.strength = layer.strength;
+      target.glowOpacity = layer.opacity; target.glowBlend = layer.blend;
+    }
   }
   return {
     version: 1,

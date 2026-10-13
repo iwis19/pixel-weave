@@ -23,13 +23,14 @@ test('text and shape modes use only their selected symbols, including empty sets
   assert.deepEqual(symbolsFor(createLayer('ascii', { symbolMode: 'shapes', shapes: ['star'], characters: 'abc' })), ['star']);
 });
 
-test('settings round trip preserves a glow dependency and independent layer parameters', () => {
+test('settings round trip preserves attached glow and independent layer parameters', () => {
   const original = defaultProject();
   original.layers[0].offsetX = -125;
   original.layers[1].characters = '✦□+';
   const restored = normalizeProject(JSON.parse(JSON.stringify(original)));
   assert.deepEqual(restored, original);
-  assert.equal(restored.layers[2].glowSource, restored.layers[1].id);
+  assert.equal(restored.layers.length, 2);
+  assert.equal(restored.layers[1].glowEnabled, true);
 });
 
 test('untrusted settings are bounded and unsupported types cannot reach the renderer', () => {
@@ -42,13 +43,17 @@ test('untrusted settings are bounded and unsupported types cannot reach the rend
   assert.equal(project.background, '#08090b');
 });
 
-test('glow cannot depend on itself or a layer above it', () => {
+test('legacy glow layers merge onto available drawing layers without leaving separate layers', () => {
   const a = createLayer('glow', { id: 'a', glowSource: 'b' });
   const b = createLayer('ascii', { id: 'b' });
   const project = normalizeProject({ version: 1, layers: [a, b] });
-  assert.equal(project.layers[0].glowSource, 'source');
+  assert.equal(project.layers.length, 1);
+  assert.equal(project.layers[0].glowEnabled, false);
   const anotherGlow = createLayer('glow', { id: 'c', glowSource: 'a' });
-  assert.equal(normalizeProject({ version: 1, layers: [a, b, anotherGlow] }).layers[2].glowSource, 'source');
+  const migrated = normalizeProject({ version: 1, layers: [a, b, anotherGlow] });
+  assert.equal(migrated.layers.length, 1);
+  assert.equal(migrated.layers[0].id, 'b');
+  assert.equal(migrated.layers[0].glowEnabled, true);
 });
 
 test('reject invalid project structure, duplicate IDs, and excessive layers', () => {
@@ -67,15 +72,16 @@ test('preview dimensions preserve aspect ratio and do not upscale tiny inputs', 
 test('reference recipe uses an explicit dot-grid mode and remains editable', () => {
   const original = peonyProject();
   assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(original))), original);
-  const dotLayer = original.layers.find(layer => layer.type === 'ascii');
-  assert.equal(dotLayer.symbolMode, 'points');
+  const dotLayer = original.layers.find(layer => layer.type === 'pixel' && layer.pixelShape === 'dot');
+  assert.equal(dotLayer.type, 'pixel');
   assert.deepEqual(symbolsFor(dotLayer), []);
   assert(dotLayer.dotDiameter > 0);
   assert(dotLayer.clumping > 0);
   assert.equal(original.layers[0].detail, 1);
   assert.equal(original.layers[0].maskEdges, 'fade');
   assert(original.layers[0].maskFeather >= 0.5);
-  assert.equal(original.layers.at(-1).glowSource, dotLayer.id);
+  assert.equal(original.layers.at(-1).glowEnabled, true);
+  assert(!original.layers.some(layer => layer.type === 'glow'));
   assert(original.layers.find(layer => layer.type === 'pixel').cellSize > dotLayer.cellSize * 2);
   const scaled = peonyProject(1800);
   assert.equal(scaled.layers[0].cellSize, original.layers[0].cellSize * 2);
@@ -102,7 +108,9 @@ test('dot settings are bounded, round-trip independently, and preserve ordinary 
   const a = createLayer('ascii', { symbolMode: 'dots', dotRows: 3.2, dotAspect: 0.7, dotEdges: 1, dotGamma: 1.4 });
   const b = createLayer('ascii', { symbolMode: 'shapes', shapes: ['dot'] });
   const project = normalizeProject({ version: 1, layers: [a, b] });
-  assert.deepEqual(project.layers[0], a);
+  assert.equal(project.layers[0].type, 'pixel');
+  assert.equal(project.layers[0].pixelShape, 'dot');
+  assert.equal(project.layers[0].dotRows, a.dotRows);
   assert.equal(a.dotRows, 3);
   assert.deepEqual(symbolsFor(b), ['dot']);
   const invalid = createLayer('ascii', { symbolMode: 'dots', dotRows: 99, dotAspect: -1, dotEdges: 9, dotGamma: 0 });
@@ -158,4 +166,19 @@ test('manual selections include empty image areas without a brightness cutoff', 
   layer.scale = .25; layer.offsetX = -150;
   const bounded = buildPointGrid(layer, 2048, 2048, source);
   assert(bounded.width <= 512 && bounded.height <= 512);
+});
+
+test('old dot selections migrate to a Pixel layer with their glow, mask and transforms intact', () => {
+  const mask = decodeSelection(); paintSelection(mask, .2, .3, 24, 128, 128);
+  const bits = encodeSelection(mask);
+  const project = normalizeProject({ version: 1, layers: [
+    { id: 'old-dots', type: 'ascii', name: 'Dots', symbolMode: 'points', selectionActive: true, selectionBits: bits, offsetX: 12 },
+    { id: 'old-glow', type: 'glow', glowSource: 'old-dots', glowStyle: 'box', radius: 9, strength: 2, opacity: .4 },
+  ] });
+  assert.equal(project.layers.length, 1);
+  const layer = project.layers[0];
+  assert.equal(layer.type, 'pixel'); assert.equal(layer.name, 'Pixels'); assert.equal(layer.pixelShape, 'dot');
+  assert.equal(layer.selectionBits, bits); assert.equal(layer.offsetX, 12);
+  assert.equal(layer.glowEnabled, true); assert.equal(layer.glowStyle, 'box'); assert.equal(layer.glowOpacity, .4);
+  assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(project))), project);
 });

@@ -26,7 +26,7 @@
       "densityPattern": "random",
       "toneSize": 0,
       "detail": 0,
-      "symbolMode": "points",
+      "symbolMode": "text",
       "characters": ".:-=+*#%@",
       "shapes": [
         "cross"
@@ -42,11 +42,14 @@
       "selectionBits": "",
       "mapping": "brightness",
       "invert": false,
-      "pixelShape": "square",
+      "pixelShape": "dot",
       "glowStyle": "soft",
       "glowSource": "source",
       "radius": 14,
       "strength": 1.6,
+      "glowEnabled": false,
+      "glowOpacity": 1,
+      "glowBlend": "add",
       "stroke": 0.1,
       "color2": "#d9a2ff",
       "colorAngle": 0,
@@ -60,9 +63,9 @@
       "maskRadius": 0.5,
       "maskInvert": false,
       "maskEdges": "fade",
-      "type": "ascii",
+      "type": "pixel",
       "id": "dots",
-      "name": "Dots"
+      "name": "Pixels"
     }
   ]
 }

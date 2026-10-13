@@ -12,7 +12,7 @@
     <header class="toolbar">
       <span class="wordmark">ASCII<span class="wordmark-dot">·</span>Effects</span>
       <div class="toolbar-actions">
-        <select id="preset" aria-label="Layer preset" title="Layer preset"><option value="dots">Dots</option><option value="peony">Red / lilac</option><option value="neutral">Neutral</option><option value="custom" disabled>Custom</option></select>
+        <select id="preset" aria-label="Layer preset" title="Layer preset"><option value="dots">Pixel</option><option value="peony">Red / lilac</option><option value="neutral">Neutral</option><option value="custom" disabled>Custom</option></select>
         <button id="open-image">Open image</button>
         <button id="save-project" title="Save layer settings">Save</button>
         <button id="load-project" title="Load layer settings">Load</button>
@@ -40,7 +40,7 @@
           <label class="inline-control">Image tint <input type="color" id="source-tint" value="#ffffff" /></label>
         </section>
         <section class="layers-section">
-          <div class="section-header"><span class="section-label">Layers</span><div class="add-actions"><button data-add="ascii">+ ASCII</button><button data-add="pixel">+ Pixel</button><button data-add="glow">+ Glow</button></div></div>
+          <div class="section-header"><span class="section-label">Layers</span><div class="add-actions"><button data-add="ascii">+ ASCII</button><button data-add="pixel">+ Pixel</button></div></div>
           <div id="layers" class="layer-list" aria-label="Layers, top to bottom"></div>
         </section>
         <section id="inspector" class="inspector" aria-label="Selected layer controls"></section>

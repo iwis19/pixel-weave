@@ -35,6 +35,8 @@ uniform float uMaskFeather;
 uniform vec2 uMaskCenter;
 uniform float uMaskRadius;
 uniform int uMaskInvert;
+uniform sampler2D uPaintMask;
+uniform int uSelectionActive;
 vec2 topUV(vec2 uv) { return vec2(uv.x, 1.0 - uv.y); }
 vec2 referencePixel() {
   return ((vUV * uResolution - uResolution * 0.5 - uOffset) / uScale + uResolution * 0.5);
@@ -58,6 +60,11 @@ vec3 layerColor(vec3 rgb, vec2 uv) {
   return rgb;
 }
 float selection(vec2 uv) {
+  if (uSelectionActive == 1) {
+    vec2 world = (uv - .5) * uScale + .5 + uOffset / uResolution;
+    if (any(lessThan(world, vec2(0.0))) || any(greaterThanEqual(world, vec2(1.0)))) return 0.0;
+    return texture(uPaintMask, topUV(world)).r;
+  }
   if (uMaskMode == 0) return 1.0;
   vec2 p = topUV(uv);
   float distance = uMaskMode == 1 ? dot(p - 0.5, vec2(cos(uMaskAngle), sin(uMaskAngle))) - (uMaskPosition - 0.5) : length(p - uMaskCenter) - uMaskRadius;
@@ -78,6 +85,7 @@ uniform int uDensityPattern;
 uniform float uToneSize;
 uniform float uDetail;
 uniform float uSeed;
+uniform float uClumping;
 uniform int uType;
 uniform int uPixelShape;
 uniform int uSymbolCount;
@@ -88,6 +96,10 @@ uniform int uShapeIds[6];
 uniform float uStroke;
 uniform int uMaskScatter;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed * 19.19) * 43758.5453); }
+float clusterNoise(vec2 p) {
+  vec2 cell = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(cell + 41.0), hash(cell + vec2(1.0, 0.0) + 41.0), f.x), mix(hash(cell + vec2(0.0, 1.0) + 41.0), hash(cell + 1.0 + 41.0), f.x), f.y);
+}
 float orderedThreshold(vec2 p) {
   // Bayer coverage keeps brightness-driven spacing regular rather than producing random grain.
   ivec2 tile = ivec2(mod(p, 4.0));
@@ -118,8 +130,8 @@ void main() {
   float coverage = selection(center / uResolution);
   float toneDensity = pow(clamp((light - uThreshold) / max(0.001, uCeiling - uThreshold), 0.0, 1.0), uDensityGamma);
   float density = uDensity * mix(1.0, toneDensity, uDensityShading);
-  float rank = uDensityPattern == 1 ? orderedThreshold(grid) : hash(grid);
-  if (sampleColor.a < 0.001 || light < uThreshold || light > uCeiling || rank >= density * (uMaskScatter == 1 ? coverage : 1.0)) { frag = vec4(0.0); return; }
+  float rank = uDensityPattern == 1 ? orderedThreshold(grid) : mix(hash(grid), clusterNoise(center / uReferenceScale / 72.0), uClumping);
+  if ((uSelectionActive == 0 && (sampleColor.a < 0.001 || light < uThreshold || light > uCeiling)) || rank >= density * (uMaskScatter == 1 ? coverage : 1.0)) { frag = vec4(0.0); return; }
   if (uMaskScatter == 1) coverage = 1.0;
   float size = uSize * mix(1.0, mix(0.4, 1.0, light), uToneSize);
   vec2 local = (p / cell - grid - 0.5) / size + 0.5;
@@ -146,7 +158,7 @@ void main() {
     vec4 detailSample = sourceAt(p / uResolution);
     if (detailSample.a > 0.001) rgb = mix(rgb, adjusted(detailSample.rgb / detailSample.a), uDetail);
   }
-  float alpha = max(0.0, mask) * sampleColor.a * coverage;
+  float alpha = max(0.0, mask) * (uSelectionActive == 1 ? 1.0 : sampleColor.a) * coverage;
   frag = vec4(layerColor(rgb, center / uResolution) * alpha, alpha);
 }`;
 

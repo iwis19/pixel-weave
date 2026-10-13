@@ -17,23 +17,20 @@ export function peonyProject(referenceWidth = 900) {
     maskMode: 'linear', maskAngle: 55, maskPosition: 0.52,
     maskFeather: 0.64, maskInvert: true, density: 1, densityPattern: 'ordered',
   });
-  const dots = createLayer('ascii', {
-    name: 'Dot field', id: 'peony-dots', symbolMode: 'points',
+  const dots = createLayer('pixel', {
+    name: 'Pixel field', id: 'peony-dots', pixelShape: 'dot',
     cellSize: 6.5 * unit, dotDiameter: 2.5, clumping: .48, opacity: 1,
     colorMode: 'gradient', color: '#ffe0c8', color2: '#dfafff',
     colorAngle: -15, colorShading: 0.4, threshold: 0.1, contrast: 1.2,
     density: .9, densityGamma: 1, brightness: 1, blend: 'screen',
+    glowEnabled: true, radius: 2.5 * unit, strength: 0.22, glowOpacity: 0.35,
   });
-  const glow = createLayer('glow', {
-    name: 'Dot glow', id: 'peony-glow', glowSource: dots.id,
-    radius: 2.5 * unit, strength: 0.22, opacity: 0.35, threshold: 0.2,
-  });
-  return { version: 1, background: '#000000', sourceOpacity: 0.35, sourceTint: '#ffedda', layers: [red, pale, dots, glow] };
+  return { version: 1, background: '#000000', sourceOpacity: 0.35, sourceTint: '#ffedda', layers: [red, pale, dots] };
 }
 
 export function dotsProject(referenceWidth = 900) {
-  const dots = createLayer('ascii', {
-    name: 'Dots', id: 'dots', symbolMode: 'points',
+  const dots = createLayer('pixel', {
+    name: 'Pixels', id: 'dots', pixelShape: 'dot',
     cellSize: Math.max(6, referenceWidth / 100), dotDiameter: 3.25,
     colorMode: 'solid', color: '#eddbff', threshold: 0, density: 0.6, clumping: 0.48,
   });

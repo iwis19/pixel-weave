@@ -40,14 +40,14 @@ export class SelectionEditor {
 
   update() {
     const layer = this.getLayer();
-    const enabled = this.drawing && layer?.symbolMode === 'points';
+    const enabled = this.drawing && layer?.type === 'pixel';
     this.surface.disabled = !enabled;
     this.highlight.hidden = !enabled;
     if (this.mapSurface) this.mapSurface.disabled = !enabled;
     this.drawButton?.setAttribute('aria-pressed', String(enabled));
     if (this.eraseButton) { this.eraseButton.disabled = !enabled; this.eraseButton.setAttribute('aria-pressed', String(this.erase)); }
     if (!enabled) { this.cursor.style.display = 'none'; if (this.mapCursor) this.mapCursor.style.display = 'none'; }
-    if (layer?.symbolMode !== 'points') return;
+    if (layer?.type !== 'pixel') return;
     const c = this.maskCanvas.getContext('2d');
     const rgba = c.createImageData(MASK_WIDTH, MASK_HEIGHT);
     for (let i = 0; i < this.mask.length; i++) { const p = i * 4; rgba.data[p] = 178; rgba.data[p + 1] = 141; rgba.data[p + 2] = 255; rgba.data[p + 3] = layer.selectionActive ? this.mask[i] * 255 : 0; }

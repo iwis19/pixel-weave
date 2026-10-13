@@ -10,7 +10,7 @@ const inspector = $('#inspector');
 const startWithDots = new URLSearchParams(location.search).get('preset') !== 'peony';
 let project = startWithDots ? dotsProject() : peonyProject();
 let presetFingerprint = JSON.stringify(project);
-let selectedId = project.layers.find(layer => layer.type === 'ascii')?.id;
+let selectedId = project.layers.find(layer => layer.type === 'ascii')?.id || project.layers.at(-1)?.id;
 let pendingFrame = 0;
 let original = false;
 let imageName = 'Peony';
@@ -85,6 +85,7 @@ function range(parent, key, label, min, max, step = 0.01, format = multiplier) {
   const input = controlElement('input', { type: 'range', min, max, step, value: layer[key], 'data-key': key, 'aria-label': label });
   input.addEventListener('input', () => {
     layer[key] = Number(input.value);
+    if (key === 'clumping' && layer.type === 'pixel') layer.densityPattern = 'random';
     if (key === 'threshold' && layer.ceiling < layer.threshold) {
       layer.ceiling = layer.threshold;
       const ceiling = inspector.querySelector('[data-key="ceiling"]');
@@ -130,11 +131,24 @@ function color(parent) {
   }
 }
 
+function glowControls() {
+  const layer = selectedLayer(), glow = group();
+  const label = controlElement('label', { class: 'inline-control' }, 'Glow');
+  const enabled = controlElement('input', { type: 'checkbox', 'aria-label': 'Glow' });
+  enabled.checked = layer.glowEnabled;
+  enabled.addEventListener('change', () => { layer.glowEnabled = enabled.checked; renderInspector(); scheduleRender(); });
+  label.append(enabled); glow.append(label);
+  if (!layer.glowEnabled) return;
+  select(glow, 'glowStyle', 'Style', [['soft', 'Soft'], ['box', 'Box']]);
+  range(glow, 'strength', 'Strength', 0, 6);
+  range(glow, 'radius', 'Radius', 0, 80, 1, px);
+}
+
 function renderInspector() {
   inspector.replaceChildren();
   const layer = selectedLayer();
   if (!layer) { selectionEditor.stop(); return; }
-  if (layer.symbolMode !== 'points') selectionEditor.stop();
+  if (layer.type !== 'pixel') selectionEditor.stop();
   const header = controlElement('div', { class: 'inspector-header' });
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
   name.addEventListener('input', () => { layer.name = name.value; renderLayers(); });
@@ -155,13 +169,15 @@ function renderInspector() {
   });
   header.append(name, duplicate, remove); inspector.append(header);
 
-  if (layer.type === 'ascii' && layer.symbolMode === 'points') {
-    select(inspector, 'symbolMode', 'Use', [['points', 'Dots'], ['text', 'Characters'], ['shapes', 'Shapes']], true);
+  if (layer.type === 'pixel') {
+    select(inspector, 'pixelShape', 'Shape', [['dot', 'Dot'], ['square', 'Square'], ['box', 'Hollow square']], true);
     const grid = group('Grid');
     range(grid, 'cellSize', 'Spacing', 6, 32, 1, px);
-    range(grid, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
+    if (layer.pixelShape === 'dot') range(grid, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
+    else range(grid, 'size', 'Pixel size', .1, 1, .01, percent);
+    if (layer.pixelShape === 'box') range(grid, 'stroke', 'Stroke width', .02, .4, .01, percent);
     const swatch = controlElement('label', { class: 'inline-control' }, 'Color');
-    const ink = controlElement('input', { type: 'color', value: layer.color, 'aria-label': 'Dot color' });
+    const ink = controlElement('input', { type: 'color', value: layer.color, 'aria-label': 'Pixel color' });
     ink.addEventListener('input', () => { layer.color = ink.value; layer.colorMode = 'solid'; const mode = inspector.querySelector('[data-key="colorMode"]'); if (mode) mode.value = 'solid'; scheduleRender(); });
     swatch.append(ink); grid.append(swatch);
     const distribution = group('Distribution');
@@ -169,6 +185,7 @@ function renderInspector() {
     range(distribution, 'brushSize', 'Brush size', 10, 500, 10, px);
     range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
     range(distribution, 'clumping', 'Clumping', 0, 1, .01, percent);
+    glowControls();
     const transform = controlElement('details'); transform.append(controlElement('summary', {}, 'Transform')); inspector.append(transform);
     range(transform, 'scale', 'Scale', .25, 3);
     const limit = Math.min(4096, Math.max(renderer?.referenceWidth || 1024, renderer?.referenceHeight || 1024));
@@ -188,7 +205,7 @@ function renderInspector() {
 
   if (layer.type === 'ascii') {
     const symbols = group('Symbols');
-    select(symbols, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes'], ['points', 'Dots'], ...(layer.symbolMode === 'dots' ? [['dots', 'Dot glyphs']] : [])], true);
+    select(symbols, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes']], true);
     if (layer.symbolMode === 'text') {
       const label = controlElement('label', { class: 'text-control' }, 'Characters');
       const input = controlElement('input', { type: 'text', value: layer.characters, 'aria-label': 'Characters', spellcheck: 'false', class: 'characters-input' });
@@ -197,7 +214,7 @@ function renderInspector() {
     } else if (layer.symbolMode === 'shapes') {
       const chips = controlElement('div', { class: 'shape-chips', role: 'group', 'aria-label': 'Shapes' });
       const names = { dot: '●', square: '■', box: '□', cross: '+', star: '✦', diamond: '◇' };
-      for (const shape of SHAPES) {
+      for (const shape of SHAPES.filter(shape => shape !== 'dot')) {
         const button = controlElement('button', { 'aria-label': shape, title: shape, 'aria-pressed': layer.shapes.includes(shape) }, names[shape]);
         button.addEventListener('click', () => {
           layer.shapes = layer.shapes.includes(shape) ? layer.shapes.filter(value => value !== shape) : [...layer.shapes, shape];
@@ -271,6 +288,7 @@ function renderInspector() {
     checkbox.addEventListener('change', () => { layer.maskInvert = checkbox.checked; scheduleRender(); });
     invert.append(checkbox); mask.append(invert);
   }
+  glowControls();
   const transform = group('Transform');
   range(transform, 'scale', 'Scale', 0.25, 3);
   const offsetLimit = Math.min(4096, Math.max(renderer?.referenceWidth || 1024, renderer?.referenceHeight || 1024));
@@ -287,15 +305,13 @@ function moveLayer(layer, direction) {
   if (next < 0 || next >= project.layers.length) return;
   const candidate = [...project.layers];
   [candidate[current], candidate[next]] = [candidate[next], candidate[current]];
-  const invalid = candidate.some((item, index) => item.type === 'glow' && !['source', 'below'].includes(item.glowSource) && !candidate.slice(0, index).some(value => value.id === item.glowSource));
-  if (invalid) return message('Keep glow above its target layer.');
   project.layers = candidate;
   renderUI(); scheduleRender();
 }
 
 function renderLayers() {
   const list = $('#layers'); list.replaceChildren();
-  const glyphs = { ascii: 'Aa', pixel: '▦', glow: '✦' };
+  const glyphs = { ascii: 'Aa', pixel: '▦' };
   for (const layer of [...project.layers].reverse()) {
     const row = controlElement('div', { class: `layer-row${layer.id === selectedId ? ' selected' : ''}` });
     const toggle = controlElement('button', { class: 'layer-toggle', 'aria-pressed': layer.enabled, 'aria-label': `Toggle ${layer.name}`, title: layer.enabled ? 'Hide layer' : 'Show layer' }, layer.enabled ? '◉' : '○');
@@ -320,8 +336,7 @@ const selectionEditor = new SelectionEditor({ surface: $('#paint-surface'), high
 document.querySelectorAll('[data-add]').forEach(button => button.addEventListener('click', () => {
   if (project.layers.length >= MAX_LAYERS) return;
   const type = button.dataset.add;
-  const target = selectedLayer();
-  const layer = createLayer(type, type === 'glow' && target && target.type !== 'glow' ? { glowSource: target.id, name: `${target.name} glow` } : {});
+  const layer = createLayer(type, type === 'pixel' ? { pixelShape: 'dot', cellSize: 9, dotDiameter: 3.25, density: .6, colorMode: 'solid', color: '#eddbff', threshold: 0 } : {});
   project.layers.push(layer); selectedId = layer.id; renderUI(); scheduleRender();
 }));
 
@@ -333,7 +348,7 @@ $('#preset').addEventListener('change', event => {
   selectionEditor.stop();
   project = event.target.value === 'peony' ? peonyProject(renderer.referenceWidth) : event.target.value === 'dots' ? dotsProject(renderer.referenceWidth) : defaultProject();
   presetFingerprint = JSON.stringify(project);
-  selectedId = project.layers.find(layer => layer.type === 'ascii')?.id;
+  selectedId = project.layers.find(layer => layer.type === 'ascii')?.id || project.layers.at(-1)?.id;
   $('#background').value = project.background;
   $('#source-tint').value = project.sourceTint;
   $('#source-opacity').value = project.sourceOpacity;
