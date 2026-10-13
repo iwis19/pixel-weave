@@ -1,5 +1,5 @@
 import { Renderer } from './engine.js';
-import { createLayer, defaultProject, normalizeProject, MAX_LAYERS, LAYER_NAMES } from './model.js';
+import { createLayer, defaultProject, normalizeProject, normalizeName, projectFilename, MAX_LAYERS, LAYER_NAMES } from './model.js';
 import { makeSample } from './sample.js';
 import { peonyProject, dotsProject, loadPeonySource } from './presets.js';
 import { SelectionEditor } from './selection-editor.js';
@@ -13,11 +13,11 @@ const inspector = $('#inspector');
 const panelResize = initPanelResize(document.querySelector('main'));
 const startWithDots = new URLSearchParams(location.search).get('preset') !== 'peony';
 let project = startWithDots ? dotsProject() : peonyProject();
-let presetFingerprint = JSON.stringify(project);
+const effectFingerprint = value => JSON.stringify(value, (key, item) => key === 'name' ? undefined : item);
+let presetFingerprint = effectFingerprint(project);
 let selectedId = project.layers.find(layer => layer.type === 'ascii')?.id || project.layers.at(-1)?.id;
 let pendingFrame = 0;
 let original = false;
-let imageName = 'Peony';
 let importGeneration = 0;
 let exporting = false;
 let messageTimer;
@@ -46,7 +46,7 @@ function message(text) {
 }
 
 function scheduleRender() {
-  if (JSON.stringify(project) !== presetFingerprint) $('#preset').value = 'custom';
+  if (effectFingerprint(project) !== presetFingerprint) $('#preset').value = 'custom';
   if (pendingFrame || exporting || !renderer) return;
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = 0;
@@ -79,6 +79,56 @@ function group(label, parent = inspector) {
 const percent = value => `${Math.round(value * 100)}%`;
 const px = value => `${Number(Number(value).toFixed(2))} px`;
 const multiplier = value => `${Number(value).toFixed(2)}×`;
+
+function inlineRename(trigger, { value, label, limit = 60, fallback, commit }) {
+  const input = controlElement('input', { type: 'text', value, maxlength: limit, class: 'rename-input', 'aria-label': label });
+  let finished = false;
+  const finish = (save, restoreFocus = false) => {
+    if (finished) return;
+    finished = true;
+    input.replaceWith(trigger);
+    const target = save ? commit(normalizeName(input.value, fallback, limit)) || trigger : trigger;
+    if (restoreFocus && target.isConnected) target.focus();
+  };
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('keydown', event => {
+    if (!['Enter', 'Escape'].includes(event.key) || event.isComposing) return;
+    event.preventDefault(); finish(event.key === 'Enter', true);
+  });
+  trigger.replaceWith(input); input.focus(); input.select();
+}
+
+function renderProjectName() {
+  const button = $('#project-name');
+  button.replaceChildren(controlElement('span', {}, project.name), uiIcon('edit'));
+  button.title = `Rename project: ${project.name}`;
+  document.title = `${project.name} — Pixel Weave`;
+}
+
+const projectNameButton = $('#project-name');
+const renameProject = () => inlineRename(projectNameButton, { value: project.name, label: 'Project name', limit: 80, fallback: 'Untitled', commit: value => {
+  project.name = value; renderProjectName(); return projectNameButton;
+} });
+projectNameButton.addEventListener('click', renameProject);
+projectNameButton.addEventListener('keydown', event => { if (event.key === 'F2') { event.preventDefault(); renameProject(); } });
+
+function commitLayerName(layer, value) {
+  layer.name = normalizeName(value, LAYER_NAMES[layer.type], 60);
+  updateLayerName(layer);
+  const input = inspector.querySelector('[aria-label="Layer name"]');
+  if (selectedId === layer.id && input) input.value = layer.name;
+  return $('#layers').querySelector(`[data-layer-id="${layer.id}"] .layer-pick`);
+}
+
+function updateLayerName(layer) {
+  const row = $('#layers').querySelector(`[data-layer-id="${layer.id}"]`);
+  if (!row) return;
+  row.querySelector('.layer-title').textContent = layer.name || LAYER_NAMES[layer.type];
+  row.querySelector('.layer-toggle').setAttribute('aria-label', `Toggle ${layer.name}`);
+  const moves = row.querySelectorAll('.move-layer');
+  moves[0].setAttribute('aria-label', `Move ${layer.name} up`);
+  moves[1].setAttribute('aria-label', `Move ${layer.name} down`);
+}
 
 function range(parent, key, label, min, max, step = 0.01, format = multiplier) {
   const layer = selectedLayer();
@@ -187,8 +237,22 @@ function renderInspector() {
   const identity = controlElement('div', { class: 'inspector-identity' });
   identity.append(controlElement('span', { class: 'section-label' }, `${LAYER_NAMES[layer.type]} layer`));
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
-  name.addEventListener('input', () => { layer.name = name.value; renderLayers(); });
-  identity.append(name);
+  let nameBeforeEditing = layer.name;
+  name.addEventListener('focus', () => { nameBeforeEditing = layer.name; });
+  name.addEventListener('input', () => { layer.name = name.value; updateLayerName(layer); });
+  name.addEventListener('blur', () => commitLayerName(layer, name.value));
+  name.addEventListener('keydown', event => {
+    if (!['Enter', 'Escape'].includes(event.key) || event.isComposing) return;
+    event.preventDefault();
+    if (event.key === 'Escape') name.value = nameBeforeEditing;
+    name.blur();
+    $('#layers').querySelector(`[data-layer-id="${layer.id}"] .layer-pick`)?.focus();
+  });
+  const nameRow = controlElement('div', { class: 'layer-name-row' });
+  const rename = controlElement('button', { type: 'button', title: 'Rename layer', 'aria-label': 'Rename layer', class: 'rename-layer' });
+  rename.append(uiIcon('edit'));
+  rename.addEventListener('click', () => { name.focus(); name.select(); });
+  nameRow.append(name, rename); identity.append(nameRow);
   const duplicate = controlElement('button', { title: 'Duplicate layer', 'aria-label': 'Duplicate layer' });
   duplicate.append(uiIcon('copy'));
   duplicate.addEventListener('click', () => {
@@ -355,13 +419,25 @@ function renderLayers() {
   const list = $('#layers'); list.replaceChildren();
   const glyphs = { ascii: 'Aa', pixel: '⠿', squares: '□', shapes: '✦' };
   for (const layer of [...project.layers].reverse()) {
-    const row = controlElement('div', { class: `layer-row${layer.id === selectedId ? ' selected' : ''}` });
+    const row = controlElement('div', { class: `layer-row${layer.id === selectedId ? ' selected' : ''}`, 'data-layer-id': layer.id });
     const toggle = controlElement('button', { class: 'layer-toggle', 'aria-pressed': layer.enabled, 'aria-label': `Toggle ${layer.name}`, title: layer.enabled ? 'Hide layer' : 'Show layer' });
     toggle.append(uiIcon(layer.enabled ? 'eye' : 'eyeOff'));
     toggle.addEventListener('click', () => { layer.enabled = !layer.enabled; renderLayers(); scheduleRender(); });
-    const pick = controlElement('button', { class: 'layer-pick', 'aria-pressed': layer.id === selectedId });
+    const pick = controlElement('button', { class: 'layer-pick', 'aria-pressed': layer.id === selectedId, title: 'Double-click or press F2 to rename' });
     pick.append(controlElement('span', { class: 'layer-type' }, glyphs[layer.type]), controlElement('span', { class: 'layer-title' }, layer.name || layer.type));
-    pick.addEventListener('click', () => { selectedId = layer.id; renderUI(); });
+    pick.addEventListener('click', () => {
+      if (selectedId === layer.id) return;
+      selectedId = layer.id;
+      // Keep the clicked node in place so double-click can begin renaming.
+      list.querySelectorAll('.layer-row').forEach(row => {
+        const selected = row.dataset.layerId === selectedId;
+        row.classList.toggle('selected', selected); row.querySelector('.layer-pick').setAttribute('aria-pressed', selected);
+      });
+      renderInspector();
+    });
+    const rename = () => inlineRename(pick, { value: layer.name, label: 'Layer name in stack', fallback: LAYER_NAMES[layer.type], commit: value => commitLayerName(layer, value) });
+    pick.addEventListener('dblclick', rename);
+    pick.addEventListener('keydown', event => { if (event.key === 'F2') { event.preventDefault(); rename(); } });
     const up = controlElement('button', { class: 'move-layer', 'aria-label': `Move ${layer.name} up`, title: 'Move up' });
     const down = controlElement('button', { class: 'move-layer', 'aria-label': `Move ${layer.name} down`, title: 'Move down' });
     up.append(uiIcon('arrowUp')); down.append(uiIcon('arrowDown'));
@@ -373,7 +449,7 @@ function renderLayers() {
   document.querySelectorAll('[data-add]').forEach(button => { button.disabled = project.layers.length >= MAX_LAYERS; });
 }
 
-function renderUI() { renderLayers(); renderInspector(); }
+function renderUI() { renderProjectName(); renderLayers(); renderInspector(); }
 
 const selectionEditor = new SelectionEditor({ surface: $('#paint-surface'), highlight: $('#selection-overlay'), cursor: $('#brush-cursor'), getLayer: selectedLayer, getRenderer: () => renderer, onChange: scheduleRender, onEditStart: () => { if (original) { original = false; $('#compare').setAttribute('aria-pressed', false); scheduleRender(); } } });
 
@@ -398,8 +474,10 @@ $('#source-opacity').addEventListener('input', event => { project.sourceOpacity 
 $('#quality').addEventListener('change', scheduleRender);
 $('#preset').addEventListener('change', event => {
   selectionEditor.stop();
+  const name = project.name;
   project = event.target.value === 'peony' ? peonyProject(renderer.referenceWidth) : event.target.value === 'dots' ? dotsProject(renderer.referenceWidth) : defaultProject();
-  presetFingerprint = JSON.stringify(project);
+  project.name = name;
+  presetFingerprint = effectFingerprint(project);
   selectedId = project.layers.find(layer => layer.type === 'ascii')?.id || project.layers.at(-1)?.id;
   $('#background').value = project.background;
   $('#source-tint').value = project.sourceTint;
@@ -426,7 +504,6 @@ async function importImage(file) {
     renderReference();
     selectionEditor.stop();
     for (const layer of project.layers) { layer.selectionActive = false; layer.selectionBits = ''; }
-    imageName = file.name.replace(/\.[^.]+$/, '') || 'Image';
     $('#image-name').textContent = file.name;
     original = false; $('#compare').setAttribute('aria-pressed', false);
     renderInspector(); scheduleRender();
@@ -447,7 +524,7 @@ function download(blob, filename) {
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-$('#save-project').addEventListener('click', () => download(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${imageName}.pixel-weave.json`));
+$('#save-project').addEventListener('click', () => download(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${projectFilename(project.name)}.pixel-weave.json`));
 $('#project-input').addEventListener('change', async event => {
   const file = event.target.files[0]; event.target.value = '';
   if (!file) return;
@@ -472,7 +549,7 @@ $('#export-image').addEventListener('click', async () => {
   if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
   try {
     const blob = await renderer.exportPNG(project, 2048);
-    download(blob, `${imageName}-pixel-weave.png`);
+    download(blob, `${projectFilename(project.name)}-pixel-weave.png`);
   } catch (error) { message(error.message); }
   finally { exporting = false; button.disabled = false; button.textContent = 'Export PNG'; scheduleRender(); }
 });

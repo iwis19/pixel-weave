@@ -65,7 +65,7 @@
       "maskEdges": "fade",
       "type": "pixel",
       "id": "dots",
-      "name": "Pixels"
+      "name": "Pixel"
     }
   ]
 }

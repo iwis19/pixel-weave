@@ -25,16 +25,16 @@ export function peonyProject(referenceWidth = 900) {
     density: .9, densityGamma: 1, brightness: 1, blend: 'screen',
     glowEnabled: true, radius: 2.5 * unit, strength: 0.22, glowOpacity: 0.35,
   });
-  return { version: 1, background: '#000000', sourceOpacity: 0.35, sourceTint: '#ffedda', layers: [red, pale, dots] };
+  return { version: 1, name: 'Untitled', background: '#000000', sourceOpacity: 0.35, sourceTint: '#ffedda', layers: [red, pale, dots] };
 }
 
 export function dotsProject(referenceWidth = 900) {
   const dots = createLayer('pixel', {
-    name: 'Pixels', id: 'dots', pixelShape: 'dot',
+    name: 'Pixel', id: 'dots', pixelShape: 'dot',
     cellSize: Math.max(6, referenceWidth / 100), dotDiameter: 3.25,
     colorMode: 'solid', color: '#eddbff', threshold: 0, density: 0.6, clumping: 0.48,
   });
-  return { version: 1, background: '#08090c', sourceOpacity: 0.55, sourceTint: '#ffffff', layers: [dots] };
+  return { version: 1, name: 'Untitled', background: '#08090c', sourceOpacity: 0.55, sourceTint: '#ffffff', layers: [dots] };
 }
 
 export async function loadPeonySource() {

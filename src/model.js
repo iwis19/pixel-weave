@@ -8,6 +8,17 @@ export const LAYER_NAMES = { pixel: 'Pixel', ascii: 'ASCII', squares: 'Squares',
 export const DRAWING_TYPES = Object.keys(LAYER_NAMES);
 export const BLENDS = ['normal', 'screen', 'add', 'multiply'];
 
+export function normalizeName(value, fallback = 'Untitled', limit = 80) {
+  const name = typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() : '';
+  return Array.from(name).slice(0, limit).join('') || fallback;
+}
+
+export function projectFilename(name) {
+  let stem = normalizeName(name).replace(/[\\/:*?"<>|]/g, '_').replace(/[. ]+$/g, '');
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem)) stem = `_${stem}`;
+  return stem || 'Untitled';
+}
+
 const defaults = {
   enabled: true, opacity: 1, blend: 'normal',
   cellSize: 10, size: 0.85, scale: 1, offsetX: 0, offsetY: 0,
@@ -63,7 +74,7 @@ export function normalizeLayer(input) {
   const type = previousDots ? 'pixel' : [...DRAWING_TYPES, 'glow'].includes(input.type) ? input.type : 'ascii';
   const out = { ...defaults, type };
   out.id = typeof input.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(input.id) ? input.id : globalThis.crypto.randomUUID();
-  out.name = typeof input.name === 'string' ? input.name.slice(0, 60) : type;
+  out.name = normalizeName(input.name, LAYER_NAMES[type] || 'Glow', 60);
   for (const [key, [min, max]] of Object.entries(ranges)) {
     const value = Number(input[key] ?? defaults[key]);
     out[key] = Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : defaults[key];
@@ -91,7 +102,7 @@ export function normalizeLayer(input) {
   out.glowSource = typeof input.glowSource === 'string' && /^(source|below|[a-zA-Z0-9_-]{1,80})$/.test(input.glowSource) ? input.glowSource : 'source';
   if (previousDots) {
     out.pixelShape = 'dot'; out.symbolMode = 'text';
-    if (['Dots', 'Dot field', 'ASCII'].includes(out.name)) out.name = out.name === 'Dot field' ? 'Pixel field' : 'Pixels';
+    if (['Dots', 'Dot field', 'ASCII'].includes(out.name)) out.name = out.name === 'Dot field' ? 'Pixel field' : 'Pixel';
   }
   if (out.type === 'pixel') out.symbolMode = 'text';
   if (out.type === 'squares') { out.symbolMode = 'text'; if (out.pixelShape === 'dot') out.pixelShape = 'square'; }
@@ -103,7 +114,7 @@ export function normalizeLayer(input) {
 export function defaultProject() {
   const pixels = createLayer('squares', { name: 'Soft squares', cellSize: 16, size: 0.94, opacity: 0.32, threshold: 0.12 });
   const ascii = createLayer('ascii', { name: 'Characters', cellSize: 9, threshold: 0.18, brightness: 1.2, glowEnabled: true, radius: 12, strength: 1.8 });
-  return { version: 1, background: '#08090b', sourceOpacity: 0.2, sourceTint: '#ffffff', layers: [pixels, ascii] };
+  return { version: 1, name: 'Untitled', background: '#08090b', sourceOpacity: 0.2, sourceTint: '#ffffff', layers: [pixels, ascii] };
 }
 
 export function normalizeProject(input) {
@@ -139,6 +150,7 @@ export function normalizeProject(input) {
   }
   return {
     version: 1,
+    name: normalizeName(input.name),
     background: /^#[0-9a-f]{6}$/i.test(input.background) ? input.background : '#08090b',
     sourceTint: /^#[0-9a-f]{6}$/i.test(input.sourceTint) ? input.sourceTint : '#ffffff',
     sourceOpacity: Number.isFinite(Number(input.sourceOpacity)) ? Math.max(0, Math.min(1, Number(input.sourceOpacity))) : 0.2,

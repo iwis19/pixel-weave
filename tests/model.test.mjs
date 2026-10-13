@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayer, defaultProject, fitDimensions, normalizeProject, symbolsFor, MAX_LAYERS } from '../src/model.js';
-import { peonyProject } from '../src/presets.js';
+import { createLayer, defaultProject, fitDimensions, normalizeProject, normalizeName, projectFilename, symbolsFor, MAX_LAYERS } from '../src/model.js';
+import { peonyProject, dotsProject } from '../src/presets.js';
 import { buildDotGlyphs } from '../src/dot-glyphs.js';
 import { decodeSelection, encodeSelection, paintSelection } from '../src/selection.js';
 import { buildPointGrid } from '../src/point-grid.js';
@@ -177,7 +177,7 @@ test('old dot selections migrate to a Pixel layer with their glow, mask and tran
   ] });
   assert.equal(project.layers.length, 1);
   const layer = project.layers[0];
-  assert.equal(layer.type, 'pixel'); assert.equal(layer.name, 'Pixels'); assert.equal(layer.pixelShape, 'dot');
+  assert.equal(layer.type, 'pixel'); assert.equal(layer.name, 'Pixel'); assert.equal(layer.pixelShape, 'dot');
   assert.equal(layer.selectionBits, bits); assert.equal(layer.offsetX, 12);
   assert.equal(layer.glowEnabled, true); assert.equal(layer.glowStyle, 'box'); assert.equal(layer.glowOpacity, .4);
   assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(project))), project);
@@ -204,4 +204,28 @@ test('old square Pixels and ASCII shape sets migrate without losing drawing para
   assert.deepEqual(migrated.layers[0], { ...square, type: 'squares' });
   assert.deepEqual(migrated.layers[1], { ...shapes, type: 'shapes', name: 'Shapes' });
   assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(migrated))), migrated);
+});
+
+test('project and custom layer names persist without changing effects or layer IDs', () => {
+  const original = dotsProject();
+  assert.equal(original.layers[0].name, 'Pixel');
+  const effects = { ...original.layers[0] };
+  original.name = 'Petal study'; original.layers[0].name = 'Highlights';
+  const restored = normalizeProject(JSON.parse(JSON.stringify(original)));
+  assert.deepEqual(restored, original);
+  assert.deepEqual({ ...restored.layers[0], name: effects.name }, effects);
+  original.layers[0].name = 'Pixels';
+  assert.equal(normalizeProject(original).layers[0].name, 'Pixels');
+  assert.equal(normalizeProject({ version: 1, layers: [] }).name, 'Untitled');
+});
+
+test('names normalize blank inputs and exports use safe filenames', () => {
+  assert.equal(normalizeName('  Petals 🌸  '), 'Petals 🌸');
+  assert.equal(normalizeName('  ', 'Pixel', 60), 'Pixel');
+  assert.equal(normalizeName('A\nB'), 'A B');
+  assert.equal(Array.from(normalizeName('🌸'.repeat(100))).length, 80);
+  assert.equal(projectFilename('Petals / red: study?'), 'Petals _ red_ study_');
+  assert.equal(projectFilename('CON'), '_CON');
+  assert.equal(projectFilename('...'), 'Untitled');
+  assert.equal(createLayer('pixel', { name: '' }).name, 'Pixel');
 });
