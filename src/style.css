@@ -29,8 +29,11 @@ main { --left-panel-default: 232px; --right-panel-default: 308px; position: rela
 .section-label { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 #open-image { padding: 5px 8px; font-size: 10px; }
 #reference-thumbnail { width: 100%; height: 112px; display: block; margin: 14px 0 18px; border: 1px solid #2c2c33; border-radius: 6px; background: #0e0e10; object-fit: contain; }
-.canvas-colors { display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; }
+.canvas-colors { display: grid; grid-template-columns: 1fr; gap: 0; }
 .canvas-colors .inline-control { margin-top: 14px; gap: 5px; font-size: 10px; }
+.color-actions { display: flex; align-items: center; gap: 6px; }
+.reset-color { width: 24px; height: 26px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
+.reset-color:hover { color: #e4eaff; border-color: #494954; background: #2b2b33; }
 .layers-section { padding: 20px 12px 16px; min-height: 0; }
 .layers-section .section-header { padding: 0 4px; }
 .add-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 14px 4px; }
@@ -121,14 +124,15 @@ input[type="checkbox"] { accent-color: #acbceb; width: 16px; height: 16px; curso
   main { grid-template-columns: minmax(0, 1fr) var(--right-panel-width, var(--right-panel-default)); grid-template-rows: auto minmax(0, 1fr); }
   .panel-resize-left { display: none; }
   .panel-resize-right { top: var(--panel-resize-top, 164px); }
-  .library-panel { grid-column: 1 / -1; flex-direction: row; max-height: 164px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .library-panel { grid-column: 1 / -1; flex-direction: row; max-height: 184px; border-right: 0; border-bottom: 1px solid var(--line); }
   .reference-section { flex: 0 0 265px; position: relative; padding: 13px 14px 14px 104px; border-bottom: 0; border-right: 1px solid var(--line); }
   .reference-section .section-header { flex-wrap: wrap; gap: 4px; }
   #reference-thumbnail { position: absolute; width: 78px; height: 90px; left: 14px; top: 16px; margin: 0; }
   .reference-section .range-control { margin-top: 8px; }
-  .canvas-colors { display: flex; gap: 8px; }
+  .canvas-colors { display: grid; gap: 0; }
   .canvas-colors .inline-control { font-size: 9px; flex: 1; gap: 3px; margin-top: 7px; }
   .canvas-colors input { width: 24px; height: 22px; }
+  .canvas-colors .reset-color { width: 22px; height: 22px; }
   .layers-section { flex: 1; min-width: 0; padding: 13px 14px; position: relative; }
   .add-actions { position: absolute; right: 14px; top: 7px; margin: 0; display: flex; }
   .add-actions button { padding: 5px 8px; }

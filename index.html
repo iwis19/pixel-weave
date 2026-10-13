@@ -25,8 +25,8 @@
           <canvas id="reference-thumbnail" width="240" height="144" role="img" aria-label="Reference image"></canvas>
           <label class="range-control"><span>Image opacity <output id="source-opacity-value">55%</output></span><input id="source-opacity" aria-label="Image opacity" type="range" min="0" max="1" step="0.01" value="0.55" /></label>
           <div class="canvas-colors">
-            <label class="inline-control">Tint <input type="color" id="source-tint" aria-label="Image tint" value="#ffffff" /></label>
-            <label class="inline-control">Background <input type="color" id="background" aria-label="Background" value="#08090b" /></label>
+            <div class="inline-control"><label for="source-tint">Tint</label><div class="color-actions"><input type="color" id="source-tint" aria-label="Image tint" value="#ffffff" /><button id="reset-tint" class="reset-color" type="button" aria-label="Reset image tint" title="Reset image tint"><span aria-hidden="true">↺</span></button></div></div>
+            <div class="inline-control"><label for="background">Background</label><div class="color-actions"><input type="color" id="background" aria-label="Background" value="#08090b" /><button id="reset-background" class="reset-color" type="button" aria-label="Reset background" title="Reset background"><span aria-hidden="true">↺</span></button></div></div>
           </div>
         </section>
         <section class="layers-section">

@@ -375,6 +375,14 @@ document.querySelectorAll('[data-add]').forEach(button => button.addEventListene
 
 $('#background').addEventListener('input', event => { project.background = event.target.value; scheduleRender(); });
 $('#source-tint').addEventListener('input', event => { project.sourceTint = event.target.value; scheduleRender(); });
+for (const [button, input, key, value] of [
+  ['#reset-tint', '#source-tint', 'sourceTint', '#ffffff'],
+  ['#reset-background', '#background', 'background', '#08090b'],
+]) $(button).addEventListener('click', () => {
+  project[key] = value;
+  $(input).value = value;
+  scheduleRender();
+});
 $('#source-opacity').addEventListener('input', event => { project.sourceOpacity = Number(event.target.value); $('#source-opacity-value').textContent = percent(project.sourceOpacity); scheduleRender(); });
 $('#quality').addEventListener('change', scheduleRender);
 $('#preset').addEventListener('change', event => {
