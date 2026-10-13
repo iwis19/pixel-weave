@@ -1,5 +1,7 @@
 {
-  "name": "ascii-effects",
+  "name": "pixel-weave",
+  "description": "A lightweight workspace for layered pixel, ASCII, and glow effects.",
+  "repository": { "type": "git", "url": "git+https://github.com/iwis19/pixel-weave.git" },
   "version": "0.1.0",
   "private": true,
   "type": "module",

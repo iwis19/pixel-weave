@@ -441,7 +441,7 @@ function download(blob, filename) {
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-$('#save-project').addEventListener('click', () => download(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${imageName}.ascii.json`));
+$('#save-project').addEventListener('click', () => download(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${imageName}.pixel-weave.json`));
 $('#project-input').addEventListener('change', async event => {
   const file = event.target.files[0]; event.target.value = '';
   if (!file) return;
@@ -466,7 +466,7 @@ $('#export-image').addEventListener('click', async () => {
   if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
   try {
     const blob = await renderer.exportPNG(project, 2048);
-    download(blob, `${imageName}-effects.png`);
+    download(blob, `${imageName}-pixel-weave.png`);
   } catch (error) { message(error.message); }
   finally { exporting = false; button.disabled = false; button.textContent = 'Export PNG'; scheduleRender(); }
 });

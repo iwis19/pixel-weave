@@ -13,7 +13,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="tabpanel
 button[aria-pressed="true"] { color: var(--text); background: var(--selected); border-color: var(--border-hover); }
 .toolbar { height: 62px; padding: 0 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); background: #0a0a0a; }
 .wordmark { font-size: 16px; font-weight: 600; letter-spacing: -.6px; white-space: nowrap; }
-.wordmark-dot { margin: 0 5px; color: var(--muted); }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .toolbar .primary { background: #ededed; color: #0a0a0a; border-color: #ededed; font-weight: 550; }
 .toolbar .primary:hover { background: #d6d6d6; }

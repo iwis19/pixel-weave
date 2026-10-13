@@ -1,8 +1,10 @@
-# ASCII Effects — phase 1
+# Pixel Weave — phase 1
 
 A browser-local image renderer with ASCII and Pixel layers, each with its own glow controls. Vanilla JavaScript, WebGL 2, no runtime dependencies, no image uploads, and no build step.
 
 [Open the live workspace](https://ascii-effects-studio.ronniegoo.chatgpt.site). The deployment is private and starts with the Pixel preset using the Dot shape.
+
+Source repository: [iwis19/pixel-weave](https://github.com/iwis19/pixel-weave).
 
 ## Run
 
@@ -31,7 +33,7 @@ Open http://127.0.0.1:5173. `npm install` is unnecessary. The server binds to lo
 - Density by tone and Tone curve make marks concentrate in brighter areas, preserving detail in darker petals or other subjects. Cell size supports fractional values; stroke width is a fraction of the cell.
 - Ordered spacing uses Bayer coverage to vary density within a regular grid. Random spacing uses the layer's seed. Size by tone varies mark size with brightness. Image detail preserves continuous source texture inside coarse cells; combine it with Image shading for colored cells that retain petal folds.
 - Glow radius is also measured in reference-image pixels. Box glow first samples a cell grid and then applies a separable square blur. Soft glow applies a Gaussian-weighted blur.
-- Save/Load stores layer settings, glow, and painted selections as JSON. Older dot layers load as Pixel layers; older standalone glows are folded into their drawing layers. Reopen the reference image separately; image data is deliberately excluded from the settings file.
+- Save/Load stores layer settings, glow, and painted selections in `.pixel-weave.json` files. Older `.ascii.json` settings remain supported. Older dot layers load as Pixel layers; older standalone glows are folded into their drawing layers. Reopen the reference image separately; image data is deliberately excluded from the settings file.
 - Export PNG renders the full composition up to a 2048 px long edge. Small images retain their original resolution. Original toggles the preview comparison; export always includes the effects.
 
 ## Engine API

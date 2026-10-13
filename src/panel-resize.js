@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'ascii-effects.panel-widths';
+const STORAGE_KEY = 'pixel-weave.panel-widths';
+const LEGACY_STORAGE_KEY = 'ascii-effects.panel-widths';
 const MIN = { left: 180, right: 260 };
 const MAX = { left: 480, right: 520 };
 
@@ -8,8 +9,11 @@ export function initPanelResize(main) {
   const events = new AbortController();
   let preferences = {}, drag = null;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const current = localStorage.getItem(STORAGE_KEY);
+    const legacy = current === null ? localStorage.getItem(LEGACY_STORAGE_KEY) : null;
+    const saved = JSON.parse(current ?? legacy);
     for (const side of ['left', 'right']) if (Number.isFinite(saved?.[side])) preferences[side] = saved[side];
+    if (current === null && legacy !== null && Object.keys(preferences).length) localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
   } catch { /* Width preferences are optional when storage is unavailable. */ }
   const mode = () => main.clientWidth <= 640 ? 'stacked' : main.clientWidth <= 900 ? 'tablet' : 'desktop';
   const active = side => mode() === 'desktop' || (side === 'right' && mode() === 'tablet');
