@@ -1,6 +1,7 @@
 import { Renderer } from '../src/engine.js';
 import { createLayer } from '../src/model.js';
 import { loadPeonySource } from '../src/presets.js';
+import { decodeSelection, encodeSelection, paintSelection } from '../src/selection.js';
 
 const results = [];
 const assert = (condition, detail) => { if (!condition) throw new Error(detail); };
@@ -269,6 +270,40 @@ test('Dot masks can fade opacity or reduce the dot population through a feather'
   assert(count(snapshot([layer])) === 16, 'Faded mask removed glyph dots instead of fading them');
   layer.maskEdges = 'scatter';
   assert(count(snapshot([layer])) === 11, 'Scattered mask did not change the discrete population');
+});
+
+test('Single-dot grid has exact coverage and changes diameter without changing positions', () => {
+  fillWhite();
+  const layer = createLayer('ascii', { symbolMode: 'points', cellSize: 8, dotDiameter: 4, density: .25, colorMode: 'solid', color: '#ffffff' });
+  const count = image => { let n = 0; for (let y = 4; y < 128; y += 8) for (let x = 4; x < 128; x += 8) if (pixel(image, x, y)[0] > 200) n++; return n; };
+  const first = snapshot([layer]); assert(count(first) === 64, 'Coverage is not one quarter of the grid');
+  const map = renderer.pointMaps.get(layer.id);
+  layer.dotDiameter = 2;
+  const small = snapshot([layer]); assert(count(small) === 64 && sum(small) < sum(first) * .5, 'Diameter changed spacing or population');
+  assert(renderer.pointMaps.get(layer.id) === map, 'Diameter rebuilt the distribution map');
+  layer.clumping = 1;
+  const clumped = snapshot([layer]); assert(count(clumped) === 64 && first.some((v, i) => v !== clumped[i]), 'Clumping did not rearrange exact coverage');
+});
+
+test('Single dots use a painted selection outside the source and preserve it across preview sizes', () => {
+  ctx.clearRect(0, 0, 128, 128); renderer.setSource(source);
+  const mask = decodeSelection(); paintSelection(mask, .12, .12, 32, 128, 128);
+  const layer = createLayer('ascii', { symbolMode: 'points', cellSize: 8, dotDiameter: 4, density: 1, threshold: 1, selectionActive: true, selectionBits: encodeSelection(mask), colorMode: 'solid', color: '#ffffff' });
+  const image = snapshot([layer]); assert(pixel(image, 12, 12)[0] > 200 && pixel(image, 100, 100)[0] === 0, 'Painting was clipped to the source or leaked');
+  const fine = snapshot([layer], { maxEdge: 256, renderScale: 2 });
+  assert(pixel(fine, 24, 24)[0] > 200 && pixel(fine, 200, 200)[0] === 0, 'Export scale moved the selection');
+  const b = createLayer('ascii', { ...layer, id: 'points-copy' });
+  const before = snapshot([b]); layer.selectionBits = ''; snapshot([layer]);
+  const after = snapshot([b]);
+  assert(before.every((v, i) => v === after[i]), 'Selections leaked between layers');
+  b.selectionActive = false; assert(sum(snapshot([b])) === 0, 'Clear did not return to empty source');
+});
+
+test('Single dots remain available as a glow target', () => {
+  fillWhite();
+  const layer = createLayer('ascii', { symbolMode: 'points', colorMode: 'solid', color: '#00ff00', cellSize: 16, dotDiameter: 3 });
+  const glow = createLayer('glow', { glowSource: layer.id, threshold: 0, radius: 8, strength: 2 });
+  assert(sum(snapshot([layer, glow])) > sum(snapshot([layer])), 'Single-dot glow is missing');
 });
 
 test('Large input processing and preview allocation stay bounded', () => {

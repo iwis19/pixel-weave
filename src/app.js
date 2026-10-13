@@ -2,6 +2,7 @@ import { Renderer } from './engine.js';
 import { createLayer, defaultProject, normalizeProject, MAX_LAYERS, SHAPES } from './model.js';
 import { makeSample } from './sample.js';
 import { peonyProject, dotsProject, loadPeonySource } from './presets.js';
+import { SelectionEditor } from './selection-editor.js';
 
 const $ = selector => document.querySelector(selector);
 const canvas = $('#preview');
@@ -24,6 +25,8 @@ function fitPreview(stats = renderer?.stats) {
   const scale = Math.min(previewArea.width / stats.width, previewArea.height / stats.height);
   canvas.style.width = `${stats.width * scale}px`;
   canvas.style.height = `${stats.height * scale}px`;
+  $('#preview-surface').style.width = canvas.style.width;
+  $('#preview-surface').style.height = canvas.style.height;
 }
 const previewObserver = new ResizeObserver(entries => {
   previewArea = { width: entries[0].contentRect.width, height: entries[0].contentRect.height };
@@ -130,7 +133,8 @@ function color(parent) {
 function renderInspector() {
   inspector.replaceChildren();
   const layer = selectedLayer();
-  if (!layer) return;
+  if (!layer) { selectionEditor.stop(); return; }
+  if (layer.symbolMode !== 'points') selectionEditor.stop();
   const header = controlElement('div', { class: 'inspector-header' });
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
   name.addEventListener('input', () => { layer.name = name.value; renderLayers(); });
@@ -151,6 +155,32 @@ function renderInspector() {
   });
   header.append(name, duplicate, remove); inspector.append(header);
 
+  if (layer.type === 'ascii' && layer.symbolMode === 'points') {
+    select(inspector, 'symbolMode', 'Use', [['points', 'Dots'], ['text', 'Characters'], ['shapes', 'Shapes']], true);
+    const grid = group('Grid');
+    range(grid, 'cellSize', 'Spacing', 6, 32, 1, px);
+    range(grid, 'dotDiameter', 'Dot diameter', .25, 5, .25, px);
+    const swatch = controlElement('label', { class: 'inline-control' }, 'Color');
+    const ink = controlElement('input', { type: 'color', value: layer.color, 'aria-label': 'Dot color' });
+    ink.addEventListener('input', () => { layer.color = ink.value; layer.colorMode = 'solid'; const mode = inspector.querySelector('[data-key="colorMode"]'); if (mode) mode.value = 'solid'; scheduleRender(); });
+    swatch.append(ink); grid.append(swatch);
+    const distribution = group('Distribution');
+    selectionEditor.inspect(distribution);
+    range(distribution, 'brushSize', 'Brush size', 10, 500, 10, px);
+    range(distribution, 'density', 'Coverage', 0, 1, .01, percent);
+    range(distribution, 'clumping', 'Clumping', 0, 1, .01, percent);
+    const transform = controlElement('details'); transform.append(controlElement('summary', {}, 'Transform')); inspector.append(transform);
+    range(transform, 'scale', 'Scale', .25, 3);
+    const limit = Math.min(4096, Math.max(renderer?.referenceWidth || 1024, renderer?.referenceHeight || 1024));
+    range(transform, 'offsetX', 'Offset X', -limit, limit, 1, px);
+    range(transform, 'offsetY', 'Offset Y', -limit, limit, 1, px);
+    const appearance = controlElement('details'); appearance.append(controlElement('summary', {}, 'Appearance')); inspector.append(appearance);
+    range(appearance, 'opacity', 'Opacity', 0, 1, .01, percent);
+    select(appearance, 'blend', 'Blend', [['normal', 'Normal'], ['screen', 'Screen'], ['add', 'Add'], ['multiply', 'Multiply']]);
+    color(appearance);
+    return;
+  }
+
   const appearance = group('Appearance');
   range(appearance, 'opacity', 'Opacity', 0, 1, 0.01, percent);
   select(appearance, 'blend', 'Blend', [['normal', 'Normal'], ['screen', 'Screen'], ['add', 'Add'], ['multiply', 'Multiply']]);
@@ -158,7 +188,7 @@ function renderInspector() {
 
   if (layer.type === 'ascii') {
     const symbols = group('Symbols');
-    select(symbols, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes'], ['dots', 'Dot grid']], true);
+    select(symbols, 'symbolMode', 'Use', [['text', 'Characters'], ['shapes', 'Shapes'], ['points', 'Dots'], ...(layer.symbolMode === 'dots' ? [['dots', 'Dot glyphs']] : [])], true);
     if (layer.symbolMode === 'text') {
       const label = controlElement('label', { class: 'text-control' }, 'Characters');
       const input = controlElement('input', { type: 'text', value: layer.characters, 'aria-label': 'Characters', spellcheck: 'false', class: 'characters-input' });
@@ -285,6 +315,8 @@ function renderLayers() {
 
 function renderUI() { renderLayers(); renderInspector(); }
 
+const selectionEditor = new SelectionEditor({ surface: $('#paint-surface'), highlight: $('#selection-overlay'), cursor: $('#brush-cursor'), getLayer: selectedLayer, getRenderer: () => renderer, onChange: scheduleRender, onEditStart: () => { if (original) { original = false; $('#compare').setAttribute('aria-pressed', false); scheduleRender(); } } });
+
 document.querySelectorAll('[data-add]').forEach(button => button.addEventListener('click', () => {
   if (project.layers.length >= MAX_LAYERS) return;
   const type = button.dataset.add;
@@ -298,6 +330,7 @@ $('#source-tint').addEventListener('input', event => { project.sourceTint = even
 $('#source-opacity').addEventListener('input', event => { project.sourceOpacity = Number(event.target.value); $('#source-opacity-value').textContent = percent(project.sourceOpacity); scheduleRender(); });
 $('#quality').addEventListener('change', scheduleRender);
 $('#preset').addEventListener('change', event => {
+  selectionEditor.stop();
   project = event.target.value === 'peony' ? peonyProject(renderer.referenceWidth) : event.target.value === 'dots' ? dotsProject(renderer.referenceWidth) : defaultProject();
   presetFingerprint = JSON.stringify(project);
   selectedId = project.layers.find(layer => layer.type === 'ascii')?.id;
@@ -307,7 +340,7 @@ $('#preset').addEventListener('change', event => {
   $('#source-opacity-value').textContent = percent(project.sourceOpacity);
   renderUI(); scheduleRender();
 });
-$('#compare').addEventListener('click', () => { original = !original; $('#compare').setAttribute('aria-pressed', original); scheduleRender(); });
+$('#compare').addEventListener('click', () => { selectionEditor.stop(); original = !original; $('#compare').setAttribute('aria-pressed', original); scheduleRender(); });
 $('#open-image').addEventListener('click', () => $('#image-input').click());
 $('#load-project').addEventListener('click', () => $('#project-input').click());
 
@@ -323,6 +356,8 @@ async function importImage(file) {
     await image.decode();
     if (generation !== importGeneration) return;
     renderer.setSource(image);
+    selectionEditor.stop();
+    for (const layer of project.layers) { layer.selectionActive = false; layer.selectionBits = ''; }
     imageName = file.name.replace(/\.[^.]+$/, '') || 'Image';
     $('#image-name').textContent = file.name;
     original = false; $('#compare').setAttribute('aria-pressed', false);
@@ -352,6 +387,7 @@ $('#project-input').addEventListener('change', async event => {
   try {
     const nextProject = normalizeProject(JSON.parse(await file.text()));
     project = nextProject;
+    selectionEditor.stop();
     selectedId = project.layers.at(-1)?.id;
     $('#background').value = project.background;
     $('#source-tint').value = project.sourceTint;

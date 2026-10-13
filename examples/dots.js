@@ -25,6 +25,6 @@ document.querySelector('#detail').addEventListener('click', () => {
   const detail = document.createElement('canvas'); detail.width = detail.height = 480;
   const ctx = detail.getContext('2d'); ctx.imageSmoothingEnabled = false;
   ctx.drawImage(renderer.canvas, 500 * scale, 340 * scale, 120 * scale, 120 * scale, 0, 0, 480, 480);
-  detail.toBlob(blob => download(blob, 'peony-dot-groups-detail.png'), 'image/png');
+  detail.toBlob(blob => download(blob, 'peony-dots-detail.png'), 'image/png');
   render();
 });

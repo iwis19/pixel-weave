@@ -21,7 +21,7 @@
     </header>
     <main>
       <section class="workspace" id="workspace" aria-label="Image preview">
-        <div class="canvas-wrap" id="canvas-wrap"><canvas id="preview" aria-label="Rendered image"></canvas></div>
+        <div class="canvas-wrap" id="canvas-wrap"><div class="preview-surface" id="preview-surface"><canvas id="preview" aria-label="Rendered image"></canvas><canvas id="selection-overlay" aria-hidden="true" hidden></canvas><button id="paint-surface" class="paint-surface" type="button" aria-label="Draw selection on image. Hold left click and drag. Arrow keys move the brush; Space paints; Escape exits drawing." disabled></button><span id="brush-cursor" class="brush-cursor" aria-hidden="true"></span></div></div>
         <div class="preview-bar">
           <span id="image-name">Peony</span>
           <div class="preview-options">

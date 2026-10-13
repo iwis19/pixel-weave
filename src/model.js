@@ -1,3 +1,5 @@
+import { MASK_BYTES } from './selection.js';
+
 export const MAX_LAYERS = 12;
 export const MAX_SYMBOLS = 64;
 export const SHAPES = ['dot', 'square', 'box', 'cross', 'star', 'diamond'];
@@ -12,6 +14,8 @@ const defaults = {
   densityPattern: 'random', toneSize: 0, detail: 0,
   symbolMode: 'text', characters: '.:-=+*#%@', shapes: ['cross'],
   dotRows: 4, dotAspect: 0.6, dotEdges: 0.6, dotGamma: 1,
+  dotDiameter: 3.25, clumping: 0.48, brushSize: 120,
+  selectionActive: false, selectionBits: '',
   mapping: 'brightness', invert: false, pixelShape: 'square',
   glowStyle: 'soft', glowSource: 'source', radius: 14, strength: 1.6,
   stroke: 0.1, color2: '#d9a2ff', colorAngle: 0, colorShading: 0,
@@ -30,10 +34,11 @@ const ranges = {
   densityShading: [0, 1], densityGamma: [0.2, 4],
   toneSize: [0, 1], detail: [0, 1],
   dotRows: [2, 8], dotAspect: [0.4, 1.4], dotEdges: [0, 1], dotGamma: [0.2, 3],
+  dotDiameter: [0.25, 5], clumping: [0, 1], brushSize: [10, 500],
 };
 
 export function symbolsFor(layer) {
-  if (layer.symbolMode === 'dots') return [];
+  if (['dots', 'points'].includes(layer.symbolMode)) return [];
   if (layer.symbolMode === 'shapes') return layer.shapes.filter(s => SHAPES.includes(s)).slice(0, MAX_SYMBOLS);
   return [...new Set(Array.from(layer.characters))].slice(0, MAX_SYMBOLS);
 }
@@ -60,8 +65,12 @@ export function normalizeLayer(input) {
   out.enabled = input.enabled !== false;
   out.invert = input.invert === true;
   out.maskInvert = input.maskInvert === true;
+  out.selectionActive = input.selectionActive === true;
+  if (typeof input.selectionBits === 'string' && input.selectionBits.length === Math.ceil(MASK_BYTES / 3) * 4 && /^[A-Za-z0-9+/]+={0,2}$/.test(input.selectionBits)) {
+    try { if (atob(input.selectionBits).length === MASK_BYTES) out.selectionBits = input.selectionBits; } catch { /* Ignore malformed settings. */ }
+  }
   for (const [key, values] of Object.entries({
-    blend: BLENDS, symbolMode: ['text', 'shapes', 'dots'], mapping: ['brightness', 'random'],
+    blend: BLENDS, symbolMode: ['text', 'shapes', 'dots', 'points'], mapping: ['brightness', 'random'],
     colorMode: ['source', 'tint', 'solid', 'gradient'], pixelShape: ['square', 'dot', 'box'], glowStyle: ['soft', 'box'],
     maskMode: ['none', 'linear', 'radial'], maskEdges: ['fade', 'scatter'],
     densityPattern: ['random', 'ordered'],
@@ -71,6 +80,7 @@ export function normalizeLayer(input) {
   out.color = /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : defaults.color;
   out.color2 = /^#[0-9a-f]{6}$/i.test(input.color2) ? input.color2 : defaults.color2;
   out.glowSource = typeof input.glowSource === 'string' && /^(source|below|[a-zA-Z0-9_-]{1,80})$/.test(input.glowSource) ? input.glowSource : 'source';
+  if (out.symbolMode === 'points') out.cellSize = Math.max(6, out.cellSize);
   return out;
 }
 

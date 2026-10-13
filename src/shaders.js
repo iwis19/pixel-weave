@@ -316,3 +316,29 @@ void main() {
   float alpha = occupied * circle * glyph.b * coverage;
   frag = vec4(layerColor(rgb, center / uResolution) * alpha, alpha);
 }`;
+
+export const pointDrawing = header + sampling + `
+uniform sampler2D uPointMap;
+uniform vec2 uPointOrigin;
+uniform float uPointCell;
+uniform float uDotDiameter;
+void main() {
+  vec2 resolution = uResolution / uReferenceScale;
+  vec2 world = topUV(vUV) * resolution;
+  vec2 offset = vec2(uOffset.x, -uOffset.y) / uReferenceScale;
+  vec2 p = (world - resolution * .5 - offset) / uScale + resolution * .5;
+  vec2 grid = floor(p / uPointCell);
+  ivec2 at = ivec2(grid - uPointOrigin);
+  ivec2 mapSize = textureSize(uPointMap, 0);
+  if (any(lessThan(at, ivec2(0))) || any(greaterThanEqual(at, mapSize))) { frag = vec4(0.0); return; }
+  float occupied = texelFetch(uPointMap, at, 0).r;
+  if (occupied < .001) { frag = vec4(0.0); return; }
+  vec2 center = (grid + .5) * uPointCell;
+  float aa = max(.0001, .6 * max(fwidth(p.x), fwidth(p.y)));
+  float circle = 1.0 - smoothstep(-aa, aa, length(p - center) - uDotDiameter * .5);
+  vec2 uv = vec2(center.x / resolution.x, 1.0 - center.y / resolution.y);
+  vec4 source = sourceAt(uv);
+  vec3 rgb = adjusted(source.a > .001 ? source.rgb / source.a : vec3(0.0));
+  float alpha = occupied * circle;
+  frag = vec4(layerColor(rgb, uv) * alpha, alpha);
+}`;

@@ -1,6 +1,7 @@
 import * as shaders from './shaders.js';
 import { BLENDS, MAX_LAYERS, SHAPES, fitDimensions, hexRGB, symbolsFor } from './model.js';
 import { buildDotGlyphs } from './dot-glyphs.js';
+import { buildPointGrid } from './point-grid.js';
 
 const GLYPH_SIZE = 32;
 const SOURCE_EDGE = 2048;
@@ -18,6 +19,8 @@ export class Renderer {
     this.height = 0;
     this.atlases = new Map();
     this.dotAtlases = new Map();
+    this.pointMaps = new Map();
+    this.sourceRevision = 0;
     this.dotMap = null;
     this.targets = [];
     this.disposed = false;
@@ -29,6 +32,7 @@ export class Renderer {
       this.targets = [];
       this.atlases.clear();
       this.dotAtlases.clear();
+      this.pointMaps.clear();
       this.dotMap = null;
       this.initialize();
       if (this.sourceCanvas) this.uploadSource();
@@ -41,7 +45,7 @@ export class Renderer {
 
   initialize() {
     const gl = this.gl;
-    this.programs = Object.fromEntries(['drawing', 'dotAnalysis', 'dotDrawing', 'extractGlow', 'blur', 'composite', 'base', 'copy'].map(name => [name, this.makeProgram(shaders[name])]));
+    this.programs = Object.fromEntries(['drawing', 'dotAnalysis', 'dotDrawing', 'pointDrawing', 'extractGlow', 'blur', 'composite', 'base', 'copy'].map(name => [name, this.makeProgram(shaders[name])]));
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
     this.source = this.makeTexture();
@@ -127,6 +131,13 @@ export class Renderer {
     this.sourceCanvas = canvas;
     this.referenceWidth = referenceWidth ?? width;
     this.referenceHeight = referenceHeight ?? height;
+    const sampling = document.createElement('canvas');
+    const sampleSize = fitDimensions(width, height, 512);
+    sampling.width = sampleSize.width; sampling.height = sampleSize.height;
+    const sampleContext = sampling.getContext('2d');
+    sampleContext.drawImage(canvas, 0, 0, sampling.width, sampling.height);
+    this.sourcePixels = sampleContext.getImageData(0, 0, sampling.width, sampling.height);
+    this.sourceRevision++;
     if (!this.lost) this.uploadSource();
   }
 
@@ -246,6 +257,24 @@ export class Renderer {
     return this.layerTarget.texture;
   }
 
+  drawPoints(layer) {
+    const key = JSON.stringify([this.sourceRevision, this.referenceWidth, this.referenceHeight, layer.cellSize, layer.scale, layer.offsetX, layer.offsetY, layer.density, layer.clumping, layer.seed, layer.selectionActive, layer.selectionBits]);
+    let map = this.pointMaps.get(layer.id);
+    if (map?.key !== key) {
+      const grid = buildPointGrid(layer, this.referenceWidth, this.referenceHeight, this.sourcePixels);
+      const texture = map?.texture || this.makeTexture();
+      const gl = this.gl;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, grid.width, grid.height, 0, gl.RED, gl.UNSIGNED_BYTE, grid.data);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      map = { ...grid, texture, key };
+      this.pointMaps.set(layer.id, map);
+    }
+    this.pass('pointDrawing', this.layerTarget, { ...this.uniforms(layer), uPointOrigin: map.origin, uPointCell: map.cell, uDotDiameter: layer.dotDiameter }, { uSource: this.source, uPointMap: map.texture });
+    return this.layerTarget.texture;
+  }
+
   pass(name, target, values = {}, textures = {}) {
     const gl = this.gl;
     const { program, uniforms } = this.programs[name];
@@ -293,6 +322,7 @@ export class Renderer {
   }
 
   drawLayer(layer) {
+    if (layer.type === 'ascii' && layer.symbolMode === 'points') return this.drawPoints(layer);
     if (layer.type === 'ascii' && layer.symbolMode === 'dots') return this.drawDots(layer);
     const shapes = layer.type === 'ascii' && layer.symbolMode === 'shapes';
     const symbols = shapes ? symbolsFor(layer) : [];
@@ -331,6 +361,9 @@ export class Renderer {
     this.pass('base', this.accum[front], { uBackground: hexRGB(project.background), uSourceOpacity: original ? 1 : project.sourceOpacity, uSourceTint: hexRGB(original ? '#ffffff' : project.sourceTint || '#ffffff') }, { uSource: this.source });
     const layers = project.layers.slice(0, MAX_LAYERS);
     const activeIds = new Set(layers.map(layer => layer.id));
+    for (const [id, map] of this.pointMaps) {
+      if (!layers.some(layer => layer.id === id && layer.symbolMode === 'points')) { this.gl.deleteTexture(map.texture); this.pointMaps.delete(id); }
+    }
     for (const [id, atlas] of this.atlases) {
       if (!activeIds.has(id) || !layers.some(layer => layer.id === id && layer.symbolMode === 'text')) { this.gl.deleteTexture(atlas.texture); this.atlases.delete(id); }
     }
@@ -362,7 +395,7 @@ export class Renderer {
       }
     }
     this.pass('copy', null, {}, { uInput: this.accum[front].texture });
-    const dotBytes = (this.dotMap ? this.dotMap.width * this.dotMap.height * 4 : 0) + [...this.dotAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0);
+    const dotBytes = (this.dotMap ? this.dotMap.width * this.dotMap.height * 4 : 0) + [...this.dotAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0) + [...this.pointMaps.values()].reduce((sum, map) => sum + map.data.byteLength, 0) + this.sourcePixels.data.byteLength;
     const stats = { width, height, drawCalls: this.drawCalls, cpuMs: performance.now() - start, limited: budgetScale < 1, surfaceBytes: Math.round(width * height * 3.5 * 4 + this.sourceCanvas.width * this.sourceCanvas.height * 4 + dotBytes) };
     this.stats = stats;
     return stats;
@@ -384,6 +417,8 @@ export class Renderer {
     this.atlases.clear();
     for (const atlas of this.dotAtlases.values()) { this.gl.deleteTexture(atlas.texture); this.gl.deleteTexture(atlas.profiles); }
     this.dotAtlases.clear();
+    for (const map of this.pointMaps.values()) this.gl.deleteTexture(map.texture);
+    this.pointMaps.clear();
     this.gl.deleteTexture(this.source);
     this.gl.deleteTexture(this.empty);
     for (const { program } of Object.values(this.programs)) this.gl.deleteProgram(program);
