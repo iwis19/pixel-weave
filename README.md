@@ -1,4 +1,6 @@
-# Pixel Weave
+# Pixel Weave 🎨
+
+<samp>**just for fun w/ codex!!!**</samp>
 
 A lightweight image-effects editor with stackable Pixel, ASCII, Squares, and Shapes layers, glow, painted selections, and live controls.
 
