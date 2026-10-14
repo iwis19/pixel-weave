@@ -2,8 +2,8 @@ import { MASK_WIDTH, MASK_HEIGHT, decodeSelection, encodeSelection, paintSelecti
 import { DRAWING_TYPES } from './model.js';
 
 export class SelectionEditor {
-  constructor({ surface, highlight, cursor, getLayer, getRenderer, onChange, onEditStart = () => {} }) {
-    Object.assign(this, { surface, highlight, cursor, getLayer, getRenderer, onChange, onEditStart });
+  constructor({ surface, highlight, cursor, getLayer, getRenderer, onChange, onEditStart = () => {}, onStrokeStart = () => {}, onStrokeEnd = () => {} }) {
+    Object.assign(this, { surface, highlight, cursor, getLayer, getRenderer, onChange, onEditStart, onStrokeStart, onStrokeEnd });
     this.drawing = false;
     this.erase = false;
     this.mask = decodeSelection();
@@ -14,6 +14,7 @@ export class SelectionEditor {
   }
 
   inspect(parent) {
+    this.cancelStroke();
     const layer = this.getLayer();
     if (this.layerId !== layer.id) this.drawing = false;
     this.layerId = layer.id;
@@ -38,7 +39,8 @@ export class SelectionEditor {
     this.update();
   }
 
-  stop() { this.drawing = false; this.update(); }
+  cancelStroke() { this.activeStroke?.(); }
+  stop() { this.cancelStroke(); this.drawing = false; this.update(); }
 
   update() {
     const layer = this.getLayer();
@@ -67,7 +69,7 @@ export class SelectionEditor {
   }
 
   bind(surface, cursor) {
-    let last = null, dragging = false, keyboard = { x: .5, y: .5 };
+    let last = null, dragging = false, pointerId = null, keyboard = { x: .5, y: .5 };
     const point = e => { const b = surface.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)), y: Math.max(0, Math.min(1, (e.clientY - b.top) / b.height)) }; };
     const showCursor = p => {
       const layer = this.getLayer(), renderer = this.getRenderer(), b = surface.getBoundingClientRect();
@@ -86,6 +88,7 @@ export class SelectionEditor {
     surface.addEventListener('pointerdown', e => {
       if (!this.drawing || surface.disabled || e.button !== 0) return;
       e.preventDefault(); surface.focus({ preventScroll: true }); surface.setPointerCapture(e.pointerId);
+      this.onStrokeStart(); this.activeStroke = finish; pointerId = e.pointerId;
       dragging = true; keyboard = last = point(e); showCursor(last); stamp(last); commit();
     });
     surface.addEventListener('pointermove', e => {
@@ -98,7 +101,12 @@ export class SelectionEditor {
       for (let i = 1; i <= steps; i++) stamp({ x: last.x + (next.x - last.x) * i / steps, y: last.y + (next.y - last.y) * i / steps });
       last = next; commit();
     });
-    const finish = () => { dragging = false; last = null; };
+    const finish = () => {
+      if (!dragging) return;
+      dragging = false; last = null; this.activeStroke = null;
+      if (pointerId !== null && surface.hasPointerCapture(pointerId)) surface.releasePointerCapture(pointerId);
+      pointerId = null; this.onStrokeEnd();
+    };
     surface.addEventListener('pointerup', finish); surface.addEventListener('pointercancel', finish); surface.addEventListener('lostpointercapture', finish);
     surface.addEventListener('pointerleave', () => { if (!dragging) cursor.style.display = 'none'; });
     surface.addEventListener('blur', () => { cursor.style.display = 'none'; });
@@ -111,6 +119,6 @@ export class SelectionEditor {
       keyboard.y = Math.max(0, Math.min(1, keyboard.y + (e.key === 'ArrowDown' ? amount : e.key === 'ArrowUp' ? -amount : 0) / renderer.referenceHeight));
       showCursor(keyboard);
     });
-    surface.addEventListener('click', e => { if (this.drawing && !surface.disabled && e.detail === 0) { stamp(keyboard); showCursor(keyboard); commit(); } });
+    surface.addEventListener('click', e => { if (this.drawing && !surface.disabled && e.detail === 0) { this.onStrokeStart(); stamp(keyboard); showCursor(keyboard); commit(); this.onStrokeEnd(); } });
   }
 }

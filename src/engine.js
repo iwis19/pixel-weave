@@ -131,6 +131,13 @@ export class Renderer {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(image, 0, 0, width, height);
+    this.setPreparedSource(canvas, { referenceWidth, referenceHeight });
+  }
+
+  // History reuses immutable, already-downsampled canvases without copying each image.
+  setPreparedSource(canvas, { referenceWidth, referenceHeight } = {}) {
+    const { width, height } = canvas;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1 || width > SOURCE_EDGE || height > SOURCE_EDGE) throw new Error('Invalid prepared image.');
     this.sourceCanvas = canvas;
     this.referenceWidth = referenceWidth ?? width;
     this.referenceHeight = referenceHeight ?? height;

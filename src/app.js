@@ -9,6 +9,8 @@ import { openShapePicker, shapeIcon, shapeInfo } from './shape-picker.js';
 import { encodeProjectFile, parseProjectFile, decodeProjectImage, MAX_PROJECT_BYTES } from './project-file.js';
 import { ProjectStore } from './project-store.js';
 import { openProjectGallery } from './project-gallery.js';
+import { EditHistory } from './edit-history.js';
+import { CanvasView } from './canvas-view.js';
 
 const $ = selector => document.querySelector(selector);
 const canvas = $('#preview');
@@ -30,21 +32,80 @@ let projectSession = 0;
 const projectStore = new ProjectStore();
 let messageTimer;
 let renderer;
-let previewArea = { width: 0, height: 0 };
+let currentSource = null;
+let restoringHistory = false;
+let loadingProject = false;
+let historyInput = null;
+let canvasView;
+const editHistory = new EditHistory({ onChange: updateHistoryButtons });
 
-function fitPreview(stats = renderer?.stats) {
-  if (!stats || !previewArea.width || !previewArea.height) return;
-  const scale = Math.min(previewArea.width / stats.width, previewArea.height / stats.height);
-  canvas.style.width = `${stats.width * scale}px`;
-  canvas.style.height = `${stats.height * scale}px`;
-  $('#preview-surface').style.width = canvas.style.width;
-  $('#preview-surface').style.height = canvas.style.height;
+function historyState() {
+  return { project: JSON.stringify(project), source: currentSource, selectedId, presetFingerprint, preset: $('#preset').value };
 }
-const previewObserver = new ResizeObserver(entries => {
-  previewArea = { width: entries[0].contentRect.width, height: entries[0].contentRect.height };
-  fitPreview();
+function updateHistoryButtons() {
+  const busy = loadingProject || exporting || saving;
+  $('#undo').disabled = busy || !editHistory.canUndo;
+  $('#redo').disabled = busy || !editHistory.canRedo;
+}
+function recordEdit() { if (!restoringHistory && !loadingProject) editHistory.record(historyState()); }
+function beginEdit(input = null) { if (!restoringHistory && !loadingProject) { editHistory.begin(historyState()); historyInput = input; } }
+function endEdit() { editHistory.end(); historyInput = null; }
+function rememberSource(name) {
+  const initial = !currentSource;
+  currentSource = { canvas: renderer.sourceCanvas, name, referenceWidth: renderer.referenceWidth, referenceHeight: renderer.referenceHeight };
+  if (initial) editHistory.attachInitialSource(currentSource);
+  canvasView?.setImageSize(renderer.referenceWidth, renderer.referenceHeight, { reset: true });
+}
+function syncProjectControls() {
+  $('#background').value = project.background; $('#source-tint').value = project.sourceTint;
+  $('#source-opacity').value = project.sourceOpacity; $('#source-opacity-value').textContent = percent(project.sourceOpacity);
+}
+function restoreHistory(direction) {
+  if (loadingProject || exporting || saving) return;
+  selectionEditor.cancelStroke();
+  endEdit();
+  recordEdit();
+  const state = direction === 'undo' ? editHistory.undo() : editHistory.redo();
+  if (!state) return;
+  restoringHistory = true;
+  try {
+    importGeneration++; projectLoadGeneration++;
+    const sourceChanged = currentSource !== state.source;
+    project = JSON.parse(state.project);
+    if (sourceChanged && state.source) {
+      currentSource = state.source;
+      renderer.setPreparedSource(currentSource.canvas, currentSource);
+      $('#image-name').textContent = currentSource.name;
+      renderReference(); canvasView.setImageSize(renderer.referenceWidth, renderer.referenceHeight, { reset: true });
+    }
+    selectedId = project.layers.some(layer => layer.id === state.selectedId) ? state.selectedId : project.layers.at(-1)?.id;
+    presetFingerprint = state.presetFingerprint; $('#preset').value = state.preset;
+    original = false; $('#compare').setAttribute('aria-pressed', false);
+    syncProjectControls(); renderUI(); scheduleRender();
+  } finally { restoringHistory = false; updateHistoryButtons(); }
+}
+$('#undo').addEventListener('click', () => restoreHistory('undo'));
+$('#redo').addEventListener('click', () => restoreHistory('redo'));
+
+const editedInput = target => target?.matches('input:not([type="file"])') && target.closest('#inspector, .reference-section, .workspace-identity, #layers');
+const textInput = target => target?.matches('input[type="text"], textarea') || target?.isContentEditable;
+document.addEventListener('input', event => { if (editedInput(event.target) && (!editHistory.group || historyInput !== event.target)) beginEdit(event.target); }, true);
+document.addEventListener('focusin', event => { if (editedInput(event.target) && textInput(event.target)) beginEdit(event.target); }, true);
+document.addEventListener('focusout', event => { if (editedInput(event.target)) queueMicrotask(() => { if (historyInput === event.target) endEdit(); }); });
+document.addEventListener('pointerdown', event => {
+  if (editedInput(event.target) && event.target.type === 'range') beginEdit(event.target);
+  else if (!event.target.closest('.paint-surface')) endEdit();
+}, true);
+for (const type of ['pointerup', 'pointercancel']) document.addEventListener(type, () => { if (historyInput?.type === 'range') endEdit(); });
+document.addEventListener('change', event => { if (event.target?.matches('input[type="range"], input[type="color"], select, input[type="checkbox"]')) endEdit(); }, true);
+document.addEventListener('click', event => { if (event.target.closest('button') && !event.target.closest('.paint-surface')) endEdit(); }, true);
+document.addEventListener('keydown', event => {
+  if (event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || textInput(event.target) || document.querySelector('dialog[open]')) return;
+  const key = event.key.toLowerCase();
+  const direction = key === 'z' ? event.shiftKey ? 'redo' : 'undo' : key === 'y' && !event.shiftKey ? 'redo' : null;
+  if (direction) { event.preventDefault(); restoreHistory(direction); }
 });
-previewObserver.observe($('#canvas-wrap'));
+document.addEventListener('keyup', event => { if (event.target?.matches('input[type="range"]')) endEdit(); });
 
 function message(text) {
   clearTimeout(messageTimer);
@@ -55,6 +116,7 @@ function message(text) {
 
 function scheduleRender() {
   if (effectFingerprint(project) !== presetFingerprint) $('#preset').value = 'custom';
+  recordEdit();
   if (pendingFrame || exporting || !renderer) return;
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = 0;
@@ -62,7 +124,7 @@ function scheduleRender() {
       const stats = renderer.render(project, { maxEdge: Number($('#quality').value), original });
       if (!stats) return;
       canvas.style.aspectRatio = `${stats.width} / ${stats.height}`;
-      fitPreview(stats);
+      canvasView?.setImageSize(renderer.referenceWidth, renderer.referenceHeight);
       $('#render-status').textContent = `${stats.width} × ${stats.height}`;
     } catch (error) { message(error.message); }
   });
@@ -115,7 +177,7 @@ function renderProjectName() {
 
 const projectNameButton = $('#project-name');
 const renameProject = () => inlineRename(projectNameButton, { value: project.name, label: 'Project name', limit: 80, fallback: 'Untitled', commit: value => {
-  project.name = value; renderProjectName(); return projectNameButton;
+  project.name = value; renderProjectName(); recordEdit(); return projectNameButton;
 } });
 projectNameButton.addEventListener('click', renameProject);
 projectNameButton.addEventListener('keydown', event => { if (event.key === 'F2') { event.preventDefault(); renameProject(); } });
@@ -125,6 +187,7 @@ function commitLayerName(layer, value) {
   updateLayerName(layer);
   const input = inspector.querySelector('[aria-label="Layer name"]');
   if (selectedId === layer.id && input) input.value = layer.name;
+  recordEdit();
   return $('#layers').querySelector(`[data-layer-id="${layer.id}"] .layer-pick`);
 }
 
@@ -247,7 +310,7 @@ function renderInspector() {
   const name = controlElement('input', { type: 'text', value: layer.name, maxlength: 60, 'aria-label': 'Layer name', class: 'layer-name-input' });
   let nameBeforeEditing = layer.name;
   name.addEventListener('focus', () => { nameBeforeEditing = layer.name; });
-  name.addEventListener('input', () => { layer.name = name.value; updateLayerName(layer); });
+  name.addEventListener('input', () => { layer.name = name.value; updateLayerName(layer); recordEdit(); });
   name.addEventListener('blur', () => commitLayerName(layer, name.value));
   name.addEventListener('keydown', event => {
     if (!['Enter', 'Escape'].includes(event.key) || event.isComposing) return;
@@ -442,6 +505,7 @@ function renderLayers() {
         row.classList.toggle('selected', selected); row.querySelector('.layer-pick').setAttribute('aria-pressed', selected);
       });
       renderInspector();
+      recordEdit();
     });
     const rename = () => inlineRename(pick, { value: layer.name, label: 'Layer name in stack', fallback: LAYER_NAMES[layer.type], commit: value => commitLayerName(layer, value) });
     pick.addEventListener('dblclick', rename);
@@ -459,7 +523,11 @@ function renderLayers() {
 
 function renderUI() { renderProjectName(); renderLayers(); renderInspector(); }
 
-const selectionEditor = new SelectionEditor({ surface: $('#paint-surface'), highlight: $('#selection-overlay'), cursor: $('#brush-cursor'), getLayer: selectedLayer, getRenderer: () => renderer, onChange: scheduleRender, onEditStart: () => { if (original) { original = false; $('#compare').setAttribute('aria-pressed', false); scheduleRender(); } } });
+const selectionEditor = new SelectionEditor({ surface: $('#paint-surface'), highlight: $('#selection-overlay'), cursor: $('#brush-cursor'), getLayer: selectedLayer, getRenderer: () => renderer, onChange: scheduleRender, onStrokeStart: () => beginEdit(), onStrokeEnd: endEdit, onEditStart: () => { if (original) { original = false; $('#compare').setAttribute('aria-pressed', false); scheduleRender(); } } });
+canvasView = new CanvasView({ viewport: $('#canvas-wrap'), surface: $('#preview-surface'),
+  controls: { toolbar: $('#canvas-tools'), out: $('#zoom-out'), in: $('#zoom-in'), level: $('#zoom-level'), fit: $('#fit-view'), hand: $('#pan-view') },
+  getDrawing: () => selectionEditor.drawing, onPanStart: () => selectionEditor.cancelStroke(),
+});
 
 document.querySelectorAll('[data-add]').forEach(button => button.addEventListener('click', () => {
   if (project.layers.length >= MAX_LAYERS) return;
@@ -502,7 +570,7 @@ $('#load-project').addEventListener('click', () => openProjectGallery({
     if (!record) throw new Error('That saved project is no longer available.');
     return restoreProjectFile(record.file, { id, name: record.name });
   },
-  onRename: (id, name) => { if (id === activeProjectId) { project.name = name; renderProjectName(); } },
+  onRename: (id, name) => { if (id === activeProjectId) { project.name = name; renderProjectName(); recordEdit(); } },
   onRemove: id => { if (id === activeProjectId) activeProjectId = null; },
   onImport: () => $('#project-input').click(),
 }));
@@ -513,17 +581,20 @@ async function importImage(file) {
   if (file.size > 50 * 1024 * 1024) return message('Choose an image smaller than 50 MB.');
   const generation = ++importGeneration;
   projectLoadGeneration++;
+  loadingProject = false; $('#save-project').disabled = saveOptions.disabled = saving; updateHistoryButtons();
   const url = URL.createObjectURL(file);
   let image;
   try {
     image = new Image(); image.decoding = 'async'; image.src = url;
     await image.decode();
     if (generation !== importGeneration) return;
+    endEdit();
     renderer.setSource(image);
     renderReference();
     selectionEditor.stop();
     for (const layer of project.layers) { layer.selectionActive = false; layer.selectionBits = ''; }
     $('#image-name').textContent = file.name;
+    rememberSource(file.name);
     original = false; $('#compare').setAttribute('aria-pressed', false);
     renderInspector(); scheduleRender();
   } catch { message('Could not open that image. Try PNG, JPEG, or WebP.'); }
@@ -573,6 +644,7 @@ function projectThumbnail(state, source) {
 async function saveProject({ copy = false, downloadFile = false } = {}) {
   if (saving) return;
   saving = true;
+  updateHistoryButtons();
   closeSaveMenu();
   const button = $('#save-project'); button.disabled = true; button.textContent = 'Saving…';
   $('#load-project').disabled = saveOptions.disabled = true;
@@ -589,12 +661,12 @@ async function saveProject({ copy = false, downloadFile = false } = {}) {
       const record = await projectStore.save({ id: copy || !activeProjectId ? crypto.randomUUID() : activeProjectId, name: state.name, file, thumbnail: await thumbnail });
       if (projectSession === session) {
         activeProjectId = record.id;
-        if (copy && project.name === previousName) { project.name = state.name; renderProjectName(); }
+        if (copy && project.name === previousName) { project.name = state.name; renderProjectName(); recordEdit(); }
       }
       message('Project saved');
     }
   } catch (error) { message(error.message); }
-  finally { saving = false; button.disabled = false; button.textContent = 'Save project'; $('#load-project').disabled = saveOptions.disabled = false; }
+  finally { saving = false; button.disabled = false; button.textContent = 'Save project'; $('#load-project').disabled = saveOptions.disabled = false; updateHistoryButtons(); }
 }
 $('#save-project').addEventListener('click', () => saveProject());
 $('#save-copy').addEventListener('click', () => saveProject({ copy: true }));
@@ -604,6 +676,7 @@ async function restoreProjectFile(file, saved = null) {
   if (file.type.startsWith('image/')) throw new Error('Use Open image for pictures. Import project expects an editable project.');
   if (file.size > MAX_PROJECT_BYTES) throw new Error('Choose a project smaller than 32 MB.');
   const generation = ++projectLoadGeneration;
+  loadingProject = true; endEdit(); updateHistoryButtons();
   $('#save-project').disabled = saveOptions.disabled = true;
   let image;
   try {
@@ -614,6 +687,7 @@ async function restoreProjectFile(file, saved = null) {
       importGeneration++;
       renderer.setSource(image);
       $('#image-name').textContent = loaded.source.name;
+      rememberSource(loaded.source.name);
       renderReference();
     } else if (renderer.sourceCanvas) importGeneration++;
     project = loaded.project;
@@ -624,10 +698,12 @@ async function restoreProjectFile(file, saved = null) {
     selectedId = project.layers.at(-1)?.id;
     $('#background').value = project.background; $('#source-tint').value = project.sourceTint;
     $('#source-opacity').value = project.sourceOpacity; $('#source-opacity-value').textContent = percent(project.sourceOpacity);
+    presetFingerprint = effectFingerprint(project); $('#preset').value = 'custom';
+    editHistory.reset(historyState());
     renderUI(); scheduleRender();
     if (!loaded.source) message('Loaded settings. The current reference image stays in place.');
     return true;
-  } finally { if (image) image.src = ''; if (!saving) $('#save-project').disabled = saveOptions.disabled = false; }
+  } finally { if (image) image.src = ''; if (generation === projectLoadGeneration) { loadingProject = false; if (!saving) $('#save-project').disabled = saveOptions.disabled = false; updateHistoryButtons(); } }
 }
 $('#project-input').addEventListener('change', async event => {
   const file = event.target.files[0]; event.target.value = '';
@@ -642,15 +718,17 @@ $('#project-input').addEventListener('change', async event => {
 $('#export-image').addEventListener('click', async () => {
   if (exporting) return;
   exporting = true;
+  updateHistoryButtons();
   const button = $('#export-image'); button.disabled = true; button.textContent = 'Exporting…';
   if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
   try {
     const blob = await renderer.exportPNG(project, 2048);
     download(blob, `${projectFilename(project.name)}-pixel-weave.png`);
   } catch (error) { message(error.message); }
-  finally { exporting = false; button.disabled = false; button.textContent = 'Export PNG'; scheduleRender(); }
+  finally { exporting = false; button.disabled = false; button.textContent = 'Export PNG'; scheduleRender(); updateHistoryButtons(); }
 });
 
+editHistory.reset(historyState());
 try {
   renderer = new Renderer(canvas, { onError: message, onRestore: scheduleRender });
   $('#preset').value = startWithDots ? 'dots' : 'peony';
@@ -662,15 +740,15 @@ try {
   const generation = importGeneration;
   loadPeonySource().then(source => {
     if (generation !== importGeneration) return;
-    renderer.setSource(source); renderReference(); renderInspector(); scheduleRender();
+    renderer.setSource(source); rememberSource($('#image-name').textContent); renderReference(); renderInspector(); scheduleRender();
   }).catch(() => {
     if (generation !== importGeneration) return;
-    renderer.setSource(makeSample()); renderReference(); renderInspector(); scheduleRender();
+    renderer.setSource(makeSample()); rememberSource($('#image-name').textContent); renderReference(); renderInspector(); scheduleRender();
   });
 } catch (error) {
   message(error.message);
   $('#export-image').disabled = true;
   $('#open-image').disabled = true;
 }
-window.addEventListener('pagehide', event => { if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; } if (!event.persisted) { panelResize.dispose(); previewObserver.disconnect(); renderer?.dispose(); } });
+window.addEventListener('pagehide', event => { if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; } if (!event.persisted) { panelResize.dispose(); canvasView.dispose(); renderer?.dispose(); } });
 window.addEventListener('pageshow', event => { if (event.persisted) { panelResize.refresh(); scheduleRender(); } });
